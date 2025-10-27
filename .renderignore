@@ -1,0 +1,27 @@
+# Ignora tutto tranne file necessari
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.db
+*.sqlite
+backups/
+Import/
+components/
+*.bat
+*.sh
+.git/
+.gitignore
+README.md
+USER_GUIDE.md
+deploy_config.json
+deploy_system.py
+restore_backup.py
+ripristina_backup.bat
+fai_deploy.bat
+avvia_test.bat
+avvia_web.bat
+avvia_mobile.bat
+avvia_mobile_public.bat
+

@@ -1,0 +1,333 @@
+{
+  "I1": {
+    "name": "Serie A",
+    "total_teams": 20,
+    "champions_league": [1, 2, 3, 4],
+    "europa_league": [5, 6],
+    "conference_league": [7],
+    "relegation": [18, 19, 20],
+    "playoff_relegation": [],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "E0": {
+    "name": "Premier League",
+    "total_teams": 20,
+    "champions_league": [1, 2, 3, 4],
+    "europa_league": [5],
+    "conference_league": [6],
+    "relegation": [18, 19, 20],
+    "playoff_relegation": [],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "SP1": {
+    "name": "Primera División",
+    "total_teams": 20,
+    "champions_league": [1, 2, 3, 4],
+    "europa_league": [5],
+    "conference_league": [6],
+    "relegation": [18, 19, 20],
+    "playoff_relegation": [],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "D1": {
+    "name": "Bundesliga",
+    "total_teams": 18,
+    "champions_league": [1, 2, 3, 4],
+    "europa_league": [5],
+    "conference_league": [6],
+    "relegation": [16, 17, 18],
+    "playoff_relegation": [16],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "F1": {
+    "name": "Ligue 1",
+    "total_teams": 18,
+    "champions_league": [1, 2, 3],
+    "europa_league": [4],
+    "conference_league": [5],
+    "relegation": [16, 17, 18],
+    "playoff_relegation": [],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "E1": {
+    "name": "Championship",
+    "total_teams": 24,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [22, 23, 24],
+    "playoff_promotion": [3, 4, 5, 6],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "E2": {
+    "name": "League One",
+    "total_teams": 24,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [21, 22, 23, 24],
+    "playoff_promotion": [4, 5, 6, 7],
+    "motivation_penalties": {
+      "objective_achieved": -0.10,
+      "objective_secured": -0.07,
+      "relegated": 0.15,
+      "fighting_relegation": 0.08
+    }
+  },
+  "I2": {
+    "name": "Serie B",
+    "total_teams": 20,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [18, 19, 20],
+    "playoff_promotion": [3, 4, 5, 6, 7, 8],
+    "motivation_penalties": {
+      "objective_achieved": -0.10,
+      "objective_secured": -0.07,
+      "relegated": 0.15,
+      "fighting_relegation": 0.08
+    }
+  },
+  "SP2": {
+    "name": "Segunda División",
+    "total_teams": 22,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [19, 20, 21, 22],
+    "playoff_promotion": [3, 4, 5, 6],
+    "motivation_penalties": {
+      "objective_achieved": -0.10,
+      "objective_secured": -0.07,
+      "relegated": 0.15,
+      "fighting_relegation": 0.08
+    }
+  },
+  "F2": {
+    "name": "Ligue 2",
+    "total_teams": 20,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [17, 18, 19, 20],
+    "playoff_promotion": [3, 4, 5],
+    "motivation_penalties": {
+      "objective_achieved": -0.10,
+      "objective_secured": -0.07,
+      "relegated": 0.15,
+      "fighting_relegation": 0.08
+    }
+  },
+  "D2": {
+    "name": "2. Bundesliga",
+    "total_teams": 18,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [16, 17, 18],
+    "playoff_promotion": [3],
+    "motivation_penalties": {
+      "objective_achieved": -0.10,
+      "objective_secured": -0.07,
+      "relegated": 0.15,
+      "fighting_relegation": 0.08
+    }
+  },
+  "G1": {
+    "name": "Super League",
+    "total_teams": 14,
+    "champions_league": [1, 2],
+    "europa_league": [3, 4],
+    "conference_league": [],
+    "relegation": [],
+    "playoff_relegation": [13, 14],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "T1": {
+    "name": "Super Lig",
+    "total_teams": 20,
+    "champions_league": [1, 2],
+    "europa_league": [3, 4],
+    "conference_league": [],
+    "relegation": [17, 18, 19, 20],
+    "playoff_relegation": [],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "N1": {
+    "name": "Eredivisie",
+    "total_teams": 18,
+    "champions_league": [1, 2],
+    "europa_league": [3],
+    "conference_league": [4],
+    "relegation": [16, 17, 18],
+    "playoff_relegation": [16],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "P1": {
+    "name": "Primeira Liga",
+    "total_teams": 18,
+    "champions_league": [1, 2],
+    "europa_league": [3, 4],
+    "conference_league": [5],
+    "relegation": [16, 17, 18],
+    "playoff_relegation": [],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "B1": {
+    "name": "First Division A",
+    "total_teams": 18,
+    "champions_league": [1],
+    "europa_league": [2, 3, 4],
+    "conference_league": [5, 6],
+    "relegation": [15, 16, 17, 18],
+    "playoff_relegation": [],
+    "motivation_penalties": {
+      "objective_achieved": -0.12,
+      "objective_secured": -0.08,
+      "relegated": 0.18,
+      "fighting_relegation": 0.09
+    }
+  },
+  "SC0": {
+    "name": "Premiership",
+    "total_teams": 12,
+    "champions_league": [1],
+    "europa_league": [2, 3],
+    "conference_league": [],
+    "relegation": [],
+    "playoff_relegation": [11, 12],
+    "motivation_penalties": {
+      "objective_achieved": -0.15,
+      "objective_secured": -0.10,
+      "relegated": 0.20,
+      "fighting_relegation": 0.10
+    }
+  },
+  "SC1": {
+    "name": "Championship",
+    "total_teams": 12,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [11, 12],
+    "playoff_promotion": [2, 3, 4],
+    "motivation_penalties": {
+      "objective_achieved": -0.10,
+      "objective_secured": -0.07,
+      "relegated": 0.15,
+      "fighting_relegation": 0.08
+    }
+  },
+  "SC2": {
+    "name": "League One",
+    "total_teams": 10,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [9, 10],
+    "playoff_promotion": [2, 3, 4],
+    "motivation_penalties": {
+      "objective_achieved": -0.10,
+      "objective_secured": -0.07,
+      "relegated": 0.15,
+      "fighting_relegation": 0.08
+    }
+  },
+  "SC3": {
+    "name": "League Two",
+    "total_teams": 10,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [],
+    "playoff_promotion": [2, 3, 4],
+    "motivation_penalties": {
+      "objective_achieved": -0.08,
+      "objective_secured": -0.05,
+      "relegated": 0.10,
+      "fighting_relegation": 0.05
+    }
+  },
+  "E3": {
+    "name": "League Two",
+    "total_teams": 24,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [21, 22, 23, 24],
+    "playoff_promotion": [4, 5, 6, 7],
+    "motivation_penalties": {
+      "objective_achieved": -0.08,
+      "objective_secured": -0.05,
+      "relegated": 0.12,
+      "fighting_relegation": 0.06
+    }
+  },
+  "EC": {
+    "name": "National League",
+    "total_teams": 24,
+    "champions_league": [],
+    "europa_league": [],
+    "conference_league": [],
+    "relegation": [21, 22, 23, 24],
+    "playoff_promotion": [4, 5, 6, 7],
+    "motivation_penalties": {
+      "objective_achieved": -0.08,
+      "objective_secured": -0.05,
+      "relegated": 0.12,
+      "fighting_relegation": 0.06
+    }
+  }
+}
+

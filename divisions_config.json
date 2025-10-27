@@ -1,0 +1,90 @@
+{
+  "B1": {
+    "exclude_top": 2,
+    "exclude_bottom": 0
+  },
+  "D1": {
+    "exclude_top": 4,
+    "exclude_bottom": 4
+  },
+  "D2": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "E0": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "E1": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "E2": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "E3": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "EC": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "F1": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "F2": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "G1": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "I1": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "I2": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "N1": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "P1": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "SC0": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "SC1": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "SC2": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "SC3": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "SP1": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "SP2": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "T1": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  }
+}
