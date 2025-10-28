@@ -105,9 +105,10 @@ st.set_page_config(
 # ============================================================================
 # CONFIGURAZIONE AUTENTICAZIONE (DOPO ZONA PROTETTA - riga 106+)
 # ============================================================================
-AUTH_ENABLED = False  # TEST: disabilitata, WEB/MOBILE: abilitata (gestito da deploy)
-ADMIN_PASSWORD = "admin123"  # Password amministratore
-GUEST_PASSWORD = "guest"  # Password ospite
+# Valori di default per ambiente TEST; possono essere sovrascritti da variabili d'ambiente
+AUTH_ENABLED = os.getenv("AUTH_ENABLED", "False").lower() == "true"
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")  # Password amministratore
+GUEST_PASSWORD = os.getenv("GUEST_PASSWORD", "guest")  # Password ospite
 
 def check_authentication():
     """Gestisce autenticazione utente"""
