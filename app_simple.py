@@ -106,6 +106,7 @@ st.set_page_config(
 # CONFIGURAZIONE AUTENTICAZIONE (DOPO ZONA PROTETTA - riga 106+)
 # ============================================================================
 # Valori di default per ambiente TEST; possono essere sovrascritti da variabili d'ambiente
+APP_ENV = os.getenv("APP_ENV", "test").lower()  # Possibili valori: test | web | mobile
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "False").lower() == "true"
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")  # Password amministratore
 GUEST_PASSWORD = os.getenv("GUEST_PASSWORD", "guest")  # Password ospite
@@ -161,7 +162,7 @@ def check_authentication():
 # Inizializza il database e il calcolatore per ambiente TEST
 @st.cache_resource
 def init_app():
-    db = FootballDatabase(environment="test")
+    db = FootballDatabase(environment=APP_ENV)
     calculator = FootballStatsCalculator(db)
     return db, calculator
 
@@ -172,7 +173,7 @@ user_role = check_authentication()
 
 # Sidebar per navigazione
 st.sidebar.title("⚽ Football Stats")
-st.sidebar.markdown("**Ambiente TEST**")
+st.sidebar.markdown(f"**Ambiente {APP_ENV.upper()}**")
 
 # Menu navigazione in base al ruolo
 st.sidebar.markdown("### Navigazione")
