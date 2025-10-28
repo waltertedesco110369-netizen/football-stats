@@ -96,6 +96,7 @@ def save_divisions_config(config):
 # Configurazione pagina
 st.set_page_config(
     page_title="Football Stats App",
+
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="expanded"
