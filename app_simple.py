@@ -1364,18 +1364,17 @@ elif page == "📋 Log Accessi":
         # Tabella dettagliata
         st.subheader("Dettagli Accessi")
         
-        # Seleziona colonne da mostrare
-        display_columns = ['login_time', 'user_role', 'environment', 'ip_address']
-        if 'session_duration' in access_logs.columns:
-            display_columns.append('session_duration')
-        if 'pages_visited' in access_logs.columns:
-            display_columns.append('pages_visited')
-        
-        # Filtra solo le colonne che esistono
-        available_columns = [col for col in display_columns if col in access_logs.columns]
-        
-        if available_columns:
-            st.dataframe(access_logs[available_columns], use_container_width=True, hide_index=True)
+        # Mostra i dati in modo semplice per evitare errori CSS
+        for index, row in access_logs.iterrows():
+            with st.expander(f"Accesso {index + 1} - {row.get('login_time', 'N/A')}"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Utente:** {row.get('user_role', 'N/A').upper()}")
+                    st.write(f"**Ambiente:** {row.get('environment', 'N/A').upper()}")
+                with col2:
+                    st.write(f"**IP:** {row.get('ip_address', 'N/A')}")
+                    if 'session_duration' in row and row.get('session_duration'):
+                        st.write(f"**Durata:** {row.get('session_duration')} minuti")
         
     else:
         st.info("Nessun accesso registrato ancora.")
