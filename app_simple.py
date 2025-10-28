@@ -111,7 +111,7 @@ AUTH_ENABLED = os.getenv("AUTH_ENABLED", "False").lower() == "true"
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")  # Password amministratore
 GUEST_PASSWORD = os.getenv("GUEST_PASSWORD", "guest")  # Password ospite
 
-def check_authentication():
+def check_authentication(db=None):
     """Gestisce autenticazione utente"""
     if not AUTH_ENABLED:
         # Ambiente TEST: nessun autenticazione
@@ -140,6 +140,14 @@ def check_authentication():
                     if password == GUEST_PASSWORD:
                         st.session_state.authenticated = True
                         st.session_state.role = "guest"
+                        # Registra accesso se db è disponibile
+                        if db:
+                            db.log_user_access(
+                                environment=APP_ENV,
+                                user_role="guest",
+                                ip_address="localhost"
+                            )
+                        st.session_state.login_time = datetime.now()
                         st.rerun()
                     elif st.session_state.login_error is None or st.session_state.login_error != "guest_error":
                         st.session_state.login_error = "guest_error"
@@ -149,6 +157,14 @@ def check_authentication():
                     if password == ADMIN_PASSWORD:
                         st.session_state.authenticated = True
                         st.session_state.role = "admin"
+                        # Registra accesso se db è disponibile
+                        if db:
+                            db.log_user_access(
+                                environment=APP_ENV,
+                                user_role="admin",
+                                ip_address="localhost"
+                            )
+                        st.session_state.login_time = datetime.now()
                         st.rerun()
                     elif st.session_state.login_error is None or st.session_state.login_error != "admin_error":
                         st.session_state.login_error = "admin_error"
@@ -169,7 +185,7 @@ def init_app():
 db, calculator = init_app()
 
 # Verifica autenticazione
-user_role = check_authentication()
+user_role = check_authentication(db)
 
 # Sidebar per navigazione
 st.sidebar.title("⚽ Football Stats")
@@ -205,6 +221,10 @@ if st.sidebar.button("🎯 Giocata Proposta", use_container_width=True):
 if user_role == "admin":
     if st.sidebar.button("📄 Import PDF", use_container_width=True):
         st.session_state.page = "📄 Import PDF"
+    
+    # Solo Admin può vedere Log Accessi
+    if st.sidebar.button("📋 Log Accessi", use_container_width=True):
+        st.session_state.page = "📋 Log Accessi"
 
 # Logout per ambienti WEB/MOBILE
 if AUTH_ENABLED and user_role in ["admin", "guest"]:
@@ -1308,6 +1328,57 @@ elif page == "📄 Import PDF":
     st.write("- Estrazione automatica di partite future")
     st.write("- Integrazione con database principale")
     st.write("- Gestione di campionati non standard")
+
+elif page == "📋 Log Accessi":
+    st.title("📋 Log Accessi")
+    
+    # Recupera i log degli accessi
+    access_logs = db.get_access_logs(limit=100)
+    
+    if not access_logs.empty:
+        st.subheader("Ultimi Accessi")
+        
+        # Mostra statistiche riepilogative
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_logins = len(access_logs)
+            st.metric("Accessi Totali", total_logins)
+        
+        with col2:
+            if 'user_role' in access_logs.columns:
+                total_admins = len(access_logs[access_logs['user_role'] == 'admin'])
+                st.metric("Accessi Admin", total_admins)
+        
+        with col3:
+            if 'user_role' in access_logs.columns:
+                total_guests = len(access_logs[access_logs['user_role'] == 'guest'])
+                st.metric("Accessi Ospiti", total_guests)
+        
+        with col4:
+            # Ultimi 7 giorni
+            if 'login_time' in access_logs.columns:
+                recent_logs = access_logs.head(20)  # Ultimi 20 accessi
+                st.metric("Visualizzati", 20)
+        
+        # Tabella dettagliata
+        st.subheader("Dettagli Accessi")
+        
+        # Seleziona colonne da mostrare
+        display_columns = ['login_time', 'user_role', 'environment', 'ip_address']
+        if 'session_duration' in access_logs.columns:
+            display_columns.append('session_duration')
+        if 'pages_visited' in access_logs.columns:
+            display_columns.append('pages_visited')
+        
+        # Filtra solo le colonne che esistono
+        available_columns = [col for col in display_columns if col in access_logs.columns]
+        
+        if available_columns:
+            st.dataframe(access_logs[available_columns], use_container_width=True, hide_index=True)
+        
+    else:
+        st.info("Nessun accesso registrato ancora.")
 
 # Footer
 st.sidebar.markdown("---")

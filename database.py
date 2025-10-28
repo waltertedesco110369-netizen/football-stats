@@ -142,6 +142,21 @@ class FootballDatabase:
             )
         ''')
         
+        # Tabella per logging accessi utente
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_access_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                environment TEXT,
+                user_role TEXT,
+                ip_address TEXT,
+                login_time TEXT DEFAULT CURRENT_TIMESTAMP,
+                logout_time TEXT,
+                session_duration INTEGER,
+                pages_visited TEXT,
+                notes TEXT
+            )
+        ''')
+        
         conn.commit()
         conn.close()
         logger.info("Database avanzato inizializzato correttamente")
@@ -464,6 +479,33 @@ class FootballDatabase:
         
         conn.commit()
         conn.close()
+    
+    def log_user_access(self, environment, user_role, ip_address, pages_visited=None, notes=None):
+        """Registra un accesso utente"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO user_access_log (environment, user_role, ip_address, pages_visited, notes)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (environment, user_role, ip_address, pages_visited, notes))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_access_logs(self, limit=100):
+        """Recupera i log degli accessi"""
+        conn = self.get_connection()
+        
+        query = '''
+            SELECT * FROM user_access_log 
+            ORDER BY login_time DESC 
+            LIMIT ?
+        '''
+        df = pd.read_sql_query(query, conn, params=(limit,))
+        
+        conn.close()
+        return df
     
     def get_imported_files(self):
         """Ottiene la lista dei file importati"""
