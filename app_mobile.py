@@ -96,6 +96,7 @@ def save_divisions_config(config):
 # Configurazione pagina
 st.set_page_config(
     page_title="Football Stats App",
+
     page_icon="⚽",
     layout="centered",
     initial_sidebar_state="expanded"
@@ -104,9 +105,11 @@ st.set_page_config(
 # ============================================================================
 # CONFIGURAZIONE AUTENTICAZIONE (DOPO ZONA PROTETTA - riga 106+)
 # ============================================================================
-AUTH_ENABLED = True  # TEST: disabilitata, WEB/MOBILE: abilitata (gestito da deploy)
-ADMIN_PASSWORD = "admin123"  # Password amministratore
-GUEST_PASSWORD = "guest"  # Password ospite
+# Valori di default per ambiente TEST; possono essere sovrascritti da variabili d'ambiente
+APP_ENV = os.getenv("APP_ENV", "test").lower()  # Possibili valori: test | web | mobile
+AUTH_ENABLED = os.getenv("AUTH_ENABLED", "False").lower() == "true"
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")  # Password amministratore
+GUEST_PASSWORD = os.getenv("GUEST_PASSWORD", "guest")  # Password ospite
 
 def check_authentication():
     """Gestisce autenticazione utente"""
@@ -159,7 +162,7 @@ def check_authentication():
 # Inizializza il database e il calcolatore per ambiente TEST
 @st.cache_resource
 def init_app():
-    db = FootballDatabase(environment="test")
+    db = FootballDatabase(environment=APP_ENV)
     calculator = FootballStatsCalculator(db)
     return db, calculator
 
@@ -170,7 +173,7 @@ user_role = check_authentication()
 
 # Sidebar per navigazione
 st.sidebar.title("⚽ Football Stats")
-st.sidebar.markdown("**Ambiente MOBILE**")
+st.sidebar.markdown(f"**Ambiente {APP_ENV.upper()}**")
 
 # Menu navigazione in base al ruolo
 st.sidebar.markdown("### Navigazione")
