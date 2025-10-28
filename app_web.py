@@ -106,7 +106,7 @@ st.set_page_config(
 # CONFIGURAZIONE AUTENTICAZIONE (DOPO ZONA PROTETTA - riga 106+)
 # ============================================================================
 # Valori di default per ambiente TEST; possono essere sovrascritti da variabili d'ambiente
-APP_ENV = os.getenv("APP_ENV", "test").lower()  # Possibili valori: test | web | mobile
+APP_ENV = "web"  # Ambiente WEB - hardcoded
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "False").lower() == "true"
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")  # Password amministratore
 GUEST_PASSWORD = os.getenv("GUEST_PASSWORD", "guest")  # Password ospite
