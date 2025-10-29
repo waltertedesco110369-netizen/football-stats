@@ -1332,8 +1332,23 @@ elif page == "📄 Import PDF":
 elif page == "📋 Log Accessi":
     st.title("📋 Log Accessi")
     
+    # Cumulativo: incrementa visualizzazioni pagina (solo admin vede questa pagina)
+    try:
+        db.increment_metric('total_views', 1)
+    except Exception:
+        pass
+    
     # Recupera i log degli accessi
     access_logs = db.get_access_logs(limit=100)
+    
+    # Recupera metriche cumulative
+    total_accesses_cum = 0
+    total_views_cum = 0
+    try:
+        total_accesses_cum = db.get_metric('total_accesses', 0)
+        total_views_cum = db.get_metric('total_views', 0)
+    except Exception:
+        pass
     
     if not access_logs.empty:
         st.subheader("Ultimi Accessi")
@@ -1343,23 +1358,26 @@ elif page == "📋 Log Accessi":
         
         with col1:
             total_logins = len(access_logs)
-            st.metric("Accessi Totali", total_logins)
+            st.metric("Accessi (ultimi 100)", total_logins)
         
         with col2:
-            if 'user_role' in access_logs.columns:
-                total_admins = len(access_logs[access_logs['user_role'] == 'admin'])
-                st.metric("Accessi Admin", total_admins)
+            st.metric("Accessi Totali (cumulativo)", total_accesses_cum)
         
         with col3:
-            if 'user_role' in access_logs.columns:
-                total_guests = len(access_logs[access_logs['user_role'] == 'guest'])
-                st.metric("Accessi Ospiti", total_guests)
+            st.metric("Visualizzazioni Totali", total_views_cum)
         
         with col4:
-            # Ultimi 7 giorni
-            if 'login_time' in access_logs.columns:
-                recent_logs = access_logs.head(20)  # Ultimi 20 accessi
-                st.metric("Visualizzati", 20)
+            st.metric("Visualizzati", min(100, len(access_logs)))
+        
+        # Controlli manutenzione
+        with st.expander("Manutenzione log"):
+            colA, colB = st.columns([2,1])
+            with colA:
+                days = st.number_input("Elimina log pi f vecchi di (giorni)", min_value=7, max_value=3650, value=60, step=1, key="purge_days")
+            with colB:
+                if st.button("Pulisci log vecchi"):
+                    deleted = db.purge_old_access_logs(int(days))
+                    st.success(f"Eliminati {deleted} log pi f vecchi di {days} giorni. I contatori cumulativi restano invariati.")
         
         # Tabella dettagliata
         st.subheader("Dettagli Accessi")
@@ -1377,6 +1395,12 @@ elif page == "📋 Log Accessi":
                         st.write(f"**Durata:** {row.get('session_duration')} minuti")
         
     else:
+        # Mostra comunque i cumulativi anche se non ci sono righe recenti
+        top1, top2 = st.columns(2)
+        with top1:
+            st.metric("Accessi Totali (cumulativo)", total_accesses_cum)
+        with top2:
+            st.metric("Visualizzazioni Totali", total_views_cum)
         st.info("Nessun accesso registrato ancora.")
 
 # Footer

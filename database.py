@@ -157,6 +157,14 @@ class FootballDatabase:
             )
         ''')
         
+        # Tabella per metriche cumulative (non si azzerano con la pulizia dei log)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS app_metrics (
+                key TEXT PRIMARY KEY,
+                value INTEGER DEFAULT 0
+            )
+        ''')
+        
         conn.commit()
         conn.close()
         logger.info("Database avanzato inizializzato correttamente")
@@ -490,6 +498,12 @@ class FootballDatabase:
             VALUES (?, ?, ?, ?, ?)
         ''', (environment, user_role, ip_address, pages_visited, notes))
         
+        # Incrementa metrica cumulativa degli accessi
+        cursor.execute('''
+            INSERT INTO app_metrics(key, value) VALUES('total_accesses', 1)
+            ON CONFLICT(key) DO UPDATE SET value = value + 1
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -519,3 +533,36 @@ class FootballDatabase:
         df = pd.read_sql_query(query, conn)
         conn.close()
         return df
+
+    def get_metric(self, key, default=0):
+        """Ottiene il valore di una metrica cumulativa"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT value FROM app_metrics WHERE key = ?', (key,))
+        row = cursor.fetchone()
+        conn.close()
+        return int(row[0]) if row else int(default)
+
+    def increment_metric(self, key, amount=1):
+        """Incrementa una metrica cumulativa di amount"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO app_metrics(key, value) VALUES(?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = value + ?
+        ''', (key, amount, amount))
+        conn.commit()
+        conn.close()
+
+    def purge_old_access_logs(self, older_than_days=60):
+        """Elimina log accessi pi f vecchi di N giorni e restituisce numero righe eliminate"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM user_access_log
+            WHERE DATE(login_time) < DATE('now', ?)
+        ''', (f'-{older_than_days} days',))
+        deleted = cursor.rowcount if cursor.rowcount is not None else 0
+        conn.commit()
+        conn.close()
+        return deleted
