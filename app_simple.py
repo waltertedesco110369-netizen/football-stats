@@ -506,9 +506,32 @@ elif page == "📁 Gestione Dati":
         # Normalizzazione stagioni
         with st.expander("Strumenti di manutenzione"):
             if st.button("Normalizza stagioni (punto -> trattino, anno singolo -> range)"):
-                changed = db.normalize_season_values()
-                st.success("Stagioni normalizzate. Riapri i filtri per aggiornare la lista.")
-                st.rerun()
+                try:
+                    if hasattr(db, 'normalize_season_values'):
+                        _ = db.normalize_season_values()
+                    else:
+                        # Fallback inline se il metodo non fosse disponibile
+                        import sqlite3
+                        conn = db.get_connection()
+                        cur = conn.cursor()
+                        cur.execute("UPDATE matches SET season = TRIM(season) WHERE season IS NOT NULL")
+                        cur.execute("UPDATE matches SET season = REPLACE(season, '.', '-') WHERE season LIKE '%.%'")
+                        # Converte anni singoli
+                        rows = cur.execute("SELECT id, season FROM matches WHERE season IS NOT NULL").fetchall()
+                        to_update = []
+                        for _id, s in rows:
+                            s = str(s)
+                            if s.isdigit() and len(s) == 4:
+                                anno = int(s)
+                                to_update.append((f"{anno}-{anno+1}", _id))
+                        if to_update:
+                            cur.executemany("UPDATE matches SET season = ? WHERE id = ?", to_update)
+                        conn.commit()
+                        conn.close()
+                    st.success("Stagioni normalizzate. Riapri i filtri per aggiornare la lista.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore nella normalizzazione: {e}")
         
         seasons = db.get_available_seasons()
         if seasons:
