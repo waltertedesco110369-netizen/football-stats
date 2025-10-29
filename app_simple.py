@@ -451,10 +451,10 @@ elif page == "📁 Gestione Dati":
             col1, col2 = st.columns(2)
             
             with col1:
-                season = st.selectbox(
+                season_option = st.selectbox(
                     "Stagione",
-                    ["2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"],
-                    help="Seleziona la stagione del file"
+                    ["Auto (rileva dal file)", "2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"],
+                    help="Per file multi-stagione scegli 'Auto': la stagione viene letta dai dati"
                 )
             
             with col2:
@@ -466,7 +466,8 @@ elif page == "📁 Gestione Dati":
             
             if st.button("Importa File", type="primary"):
                 with st.spinner("Importazione in corso..."):
-                    success = db.import_excel_file(temp_path, season, file_type)
+                    season_param = None if season_option.startswith("Auto") else season_option
+                    success = db.import_excel_file(temp_path, season_param, file_type)
                     if success:
                         st.success("File importato con successo!")
                         st.rerun()
