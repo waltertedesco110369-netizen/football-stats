@@ -402,6 +402,28 @@ class FootballDatabase:
         conn.close()
         return seasons['season'].tolist()
     
+    def normalize_season_values(self):
+        """Normalizza i formati stagione in tutto il DB (es. 2022.2023 -> 2022-2023, '2022' -> 2022-2023)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        # 1) Trim spazi
+        cursor.execute("UPDATE matches SET season = TRIM(season) WHERE season IS NOT NULL")
+        # 2) Sostituisci punto con trattino
+        cursor.execute("UPDATE matches SET season = REPLACE(season, '.', '-') WHERE season LIKE '%.%' ")
+        # 3) Converti anni singoli in range anno-anno+1
+        rows = pd.read_sql_query("SELECT id, season FROM matches WHERE season IS NOT NULL", conn)
+        updates = []
+        for _, r in rows.iterrows():
+            s = str(r['season'])
+            if s.isdigit() and len(s) == 4:
+                anno = int(s)
+                updates.append((f"{anno}-{anno+1}", r['id']))
+        if updates:
+            cursor.executemany("UPDATE matches SET season = ? WHERE id = ?", updates)
+        conn.commit()
+        conn.close()
+        return len(updates)
+    
     def get_available_divisions(self):
         """Ottiene le divisioni disponibili nel database"""
         conn = self.get_connection()

@@ -503,6 +503,13 @@ elif page == "📁 Gestione Dati":
         
         st.warning("⚠️ Attenzione: Questa operazione eliminerà permanentemente i dati.")
         
+        # Normalizzazione stagioni
+        with st.expander("Strumenti di manutenzione"):
+            if st.button("Normalizza stagioni (punto -> trattino, anno singolo -> range)"):
+                changed = db.normalize_season_values()
+                st.success("Stagioni normalizzate. Riapri i filtri per aggiornare la lista.")
+                st.rerun()
+        
         seasons = db.get_available_seasons()
         if seasons:
             season_to_delete = st.selectbox(
