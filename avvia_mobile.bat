@@ -21,6 +21,7 @@ timeout /t 5 /nobreak >nul
 REM Avvia Streamlit con accesso da rete locale
 echo Avvio Streamlit MOBILE (accessibile da telefono)...
 echo Indirizzo sul telefono: http://192.168.1.12:8505
+set APP_ENV=mobile
 python -m streamlit run app_mobile.py --server.port 8505 --server.headless true --server.address 0.0.0.0
 
 echo.

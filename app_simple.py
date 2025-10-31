@@ -52,9 +52,11 @@ def get_season_filters(seasons, key_prefix="seasons"):
     # Inizializza session state se non esiste O se la stagione selezionata non è più valida
     if f'{key_prefix}_selected' not in st.session_state:
         st.session_state[f'{key_prefix}_selected'] = [default_season]
-    elif not st.session_state[f'{key_prefix}_selected'] or st.session_state[f'{key_prefix}_selected'][0] != default_season:
-        # Se la stagione salvata non è più la più recente, aggiorna
-        st.session_state[f'{key_prefix}_selected'] = [default_season]
+    else:
+        # Mantieni la scelta utente; se contiene stagioni non più disponibili, ripulisci
+        prev = st.session_state.get(f'{key_prefix}_selected', [])
+        valid = [s for s in prev if s in seasons_sorted]
+        st.session_state[f'{key_prefix}_selected'] = valid or [default_season]
     
     # Usa multiselect con checkbox visibili
     selected_seasons = st.multiselect(
@@ -560,23 +562,28 @@ elif page == "🏆 Classifiche":
     with col2:
         divisions = db.get_available_divisions()
         
-        # Mantieni l'ultima selezione o usa la prima
-        if 'classifiche_division' not in st.session_state:
-            st.session_state.classifiche_division = divisions[0] if divisions else None
+        # Inizializzazione una sola volta
+        if 'classifiche_division' not in st.session_state and divisions:
+            st.session_state.classifiche_division = divisions[0]
         
-        # Verifica che la divisione salvata esista ancora nella lista
-        if st.session_state.classifiche_division not in divisions:
-            st.session_state.classifiche_division = divisions[0] if divisions else None
-        
+        # Mantieni selezione se ancora valida
+        current_div = st.session_state.get('classifiche_division', divisions[0] if divisions else None)
+        if current_div not in divisions and divisions:
+            current_div = divisions[0]
+
+        # Usa una chiave fissa per evitare reset al primo click
         selected_division = st.selectbox(
             "Campionato",
             divisions,
-            index=divisions.index(st.session_state.classifiche_division) if st.session_state.classifiche_division in divisions else 0,
-            help="Seleziona un campionato (digita per cercare)"
+            index=divisions.index(current_div) if divisions and current_div in divisions else 0,
+            help="Seleziona un campionato (digita per cercare)",
+            key="classifiche_division_select",
+            format_func=lambda d: __import__('database').get_division_display_name(d)
         )
         
-        # Salva la selezione corrente
-        st.session_state.classifiche_division = selected_division
+        # Salva solo se cambia
+        if selected_division != st.session_state.get('classifiche_division'):
+            st.session_state.classifiche_division = selected_division
         
         # Converte in lista per compatibilità con il resto del codice
         selected_divisions = [selected_division] if selected_division else []
@@ -691,7 +698,8 @@ elif page == "📊 Under/Over":
             "Campionato",
             divisions_uo,
             index=divisions_uo.index(st.session_state.underover_division) if st.session_state.underover_division in divisions_uo else 0,
-            key="uo_division"
+            key="uo_division",
+            format_func=lambda d: __import__('database').get_division_display_name(d)
         )
         
         # Salva la selezione corrente
@@ -821,7 +829,8 @@ elif page == "📊 Classifiche con Parametri":
                 "Campionato",
                 divisions,
                 key="parametri_division_selectbox",
-                index=divisions.index(st.session_state.parametri_division) if st.session_state.parametri_division in divisions else 0
+                index=divisions.index(st.session_state.parametri_division) if st.session_state.parametri_division in divisions else 0,
+                format_func=lambda d: __import__('database').get_division_display_name(d)
             )
             
             # Salva la selezione corrente

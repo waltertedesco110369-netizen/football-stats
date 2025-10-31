@@ -52,9 +52,11 @@ def get_season_filters(seasons, key_prefix="seasons"):
     # Inizializza session state se non esiste O se la stagione selezionata non è più valida
     if f'{key_prefix}_selected' not in st.session_state:
         st.session_state[f'{key_prefix}_selected'] = [default_season]
-    elif not st.session_state[f'{key_prefix}_selected'] or st.session_state[f'{key_prefix}_selected'][0] != default_season:
-        # Se la stagione salvata non è più la più recente, aggiorna
-        st.session_state[f'{key_prefix}_selected'] = [default_season]
+    else:
+        # Mantieni la scelta utente; se contiene stagioni non più disponibili, ripulisci
+        prev = st.session_state.get(f'{key_prefix}_selected', [])
+        valid = [s for s in prev if s in seasons_sorted]
+        st.session_state[f'{key_prefix}_selected'] = valid or [default_season]
     
     # Usa multiselect con checkbox visibili
     selected_seasons = st.multiselect(
@@ -451,10 +453,10 @@ elif page == "📁 Gestione Dati":
             col1, col2 = st.columns(2)
             
             with col1:
-                season = st.selectbox(
+                season_option = st.selectbox(
                     "Stagione",
-                    ["2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"],
-                    help="Seleziona la stagione del file"
+                    ["Auto (rileva dal file)", "2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"],
+                    help="Per file multi-stagione scegli 'Auto': la stagione viene letta dai dati"
                 )
             
             with col2:
@@ -466,7 +468,8 @@ elif page == "📁 Gestione Dati":
             
             if st.button("Importa File", type="primary"):
                 with st.spinner("Importazione in corso..."):
-                    success = db.import_excel_file(temp_path, season, file_type)
+                    season_param = None if season_option.startswith("Auto") else season_option
+                    success = db.import_excel_file(temp_path, season_param, file_type)
                     if success:
                         st.success("File importato con successo!")
                         st.rerun()
@@ -502,6 +505,36 @@ elif page == "📁 Gestione Dati":
         
         st.warning("⚠️ Attenzione: Questa operazione eliminerà permanentemente i dati.")
         
+        # Normalizzazione stagioni
+        with st.expander("Strumenti di manutenzione"):
+            if st.button("Normalizza stagioni (punto -> trattino, anno singolo -> range)"):
+                try:
+                    if hasattr(db, 'normalize_season_values'):
+                        _ = db.normalize_season_values()
+                    else:
+                        # Fallback inline se il metodo non fosse disponibile
+                        import sqlite3
+                        conn = db.get_connection()
+                        cur = conn.cursor()
+                        cur.execute("UPDATE matches SET season = TRIM(season) WHERE season IS NOT NULL")
+                        cur.execute("UPDATE matches SET season = REPLACE(season, '.', '-') WHERE season LIKE '%.%'")
+                        # Converte anni singoli
+                        rows = cur.execute("SELECT id, season FROM matches WHERE season IS NOT NULL").fetchall()
+                        to_update = []
+                        for _id, s in rows:
+                            s = str(s)
+                            if s.isdigit() and len(s) == 4:
+                                anno = int(s)
+                                to_update.append((f"{anno}-{anno+1}", _id))
+                        if to_update:
+                            cur.executemany("UPDATE matches SET season = ? WHERE id = ?", to_update)
+                        conn.commit()
+                        conn.close()
+                    st.success("Stagioni normalizzate. Riapri i filtri per aggiornare la lista.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore nella normalizzazione: {e}")
+        
         seasons = db.get_available_seasons()
         if seasons:
             season_to_delete = st.selectbox(
@@ -529,23 +562,28 @@ elif page == "🏆 Classifiche":
     with col2:
         divisions = db.get_available_divisions()
         
-        # Mantieni l'ultima selezione o usa la prima
-        if 'classifiche_division' not in st.session_state:
-            st.session_state.classifiche_division = divisions[0] if divisions else None
+        # Inizializzazione una sola volta
+        if 'classifiche_division' not in st.session_state and divisions:
+            st.session_state.classifiche_division = divisions[0]
         
-        # Verifica che la divisione salvata esista ancora nella lista
-        if st.session_state.classifiche_division not in divisions:
-            st.session_state.classifiche_division = divisions[0] if divisions else None
-        
+        # Mantieni selezione se ancora valida
+        current_div = st.session_state.get('classifiche_division', divisions[0] if divisions else None)
+        if current_div not in divisions and divisions:
+            current_div = divisions[0]
+
+        # Usa una chiave fissa per evitare reset al primo click
         selected_division = st.selectbox(
             "Campionato",
             divisions,
-            index=divisions.index(st.session_state.classifiche_division) if st.session_state.classifiche_division in divisions else 0,
-            help="Seleziona un campionato (digita per cercare)"
+            index=divisions.index(current_div) if divisions and current_div in divisions else 0,
+            help="Seleziona un campionato (digita per cercare)",
+            key="classifiche_division_select",
+            format_func=lambda d: __import__('database').get_division_display_name(d)
         )
         
-        # Salva la selezione corrente
-        st.session_state.classifiche_division = selected_division
+        # Salva solo se cambia
+        if selected_division != st.session_state.get('classifiche_division'):
+            st.session_state.classifiche_division = selected_division
         
         # Converte in lista per compatibilità con il resto del codice
         selected_divisions = [selected_division] if selected_division else []
@@ -660,7 +698,8 @@ elif page == "📊 Under/Over":
             "Campionato",
             divisions_uo,
             index=divisions_uo.index(st.session_state.underover_division) if st.session_state.underover_division in divisions_uo else 0,
-            key="uo_division"
+            key="uo_division",
+            format_func=lambda d: __import__('database').get_division_display_name(d)
         )
         
         # Salva la selezione corrente
@@ -790,7 +829,8 @@ elif page == "📊 Classifiche con Parametri":
                 "Campionato",
                 divisions,
                 key="parametri_division_selectbox",
-                index=divisions.index(st.session_state.parametri_division) if st.session_state.parametri_division in divisions else 0
+                index=divisions.index(st.session_state.parametri_division) if st.session_state.parametri_division in divisions else 0,
+                format_func=lambda d: __import__('database').get_division_display_name(d)
             )
             
             # Salva la selezione corrente
@@ -1332,8 +1372,23 @@ elif page == "📄 Import PDF":
 elif page == "📋 Log Accessi":
     st.title("📋 Log Accessi")
     
+    # Cumulativo: incrementa visualizzazioni pagina (solo admin vede questa pagina)
+    try:
+        db.increment_metric('total_views', 1)
+    except Exception:
+        pass
+    
     # Recupera i log degli accessi
     access_logs = db.get_access_logs(limit=100)
+    
+    # Recupera metriche cumulative
+    total_accesses_cum = 0
+    total_views_cum = 0
+    try:
+        total_accesses_cum = db.get_metric('total_accesses', 0)
+        total_views_cum = db.get_metric('total_views', 0)
+    except Exception:
+        pass
     
     if not access_logs.empty:
         st.subheader("Ultimi Accessi")
@@ -1343,41 +1398,49 @@ elif page == "📋 Log Accessi":
         
         with col1:
             total_logins = len(access_logs)
-            st.metric("Accessi Totali", total_logins)
+            st.metric("Accessi (ultimi 100)", total_logins)
         
         with col2:
-            if 'user_role' in access_logs.columns:
-                total_admins = len(access_logs[access_logs['user_role'] == 'admin'])
-                st.metric("Accessi Admin", total_admins)
+            st.metric("Accessi Totali (cumulativo)", total_accesses_cum)
         
         with col3:
-            if 'user_role' in access_logs.columns:
-                total_guests = len(access_logs[access_logs['user_role'] == 'guest'])
-                st.metric("Accessi Ospiti", total_guests)
+            st.metric("Visualizzazioni Totali", total_views_cum)
         
         with col4:
-            # Ultimi 7 giorni
-            if 'login_time' in access_logs.columns:
-                recent_logs = access_logs.head(20)  # Ultimi 20 accessi
-                st.metric("Visualizzati", 20)
+            st.metric("Visualizzati", min(100, len(access_logs)))
+        
+        # Controlli manutenzione
+        with st.expander("Manutenzione log"):
+            colA, colB = st.columns([2,1])
+            with colA:
+                days = st.number_input("Elimina log pi f vecchi di (giorni)", min_value=7, max_value=3650, value=60, step=1, key="purge_days")
+            with colB:
+                if st.button("Pulisci log vecchi"):
+                    deleted = db.purge_old_access_logs(int(days))
+                    st.success(f"Eliminati {deleted} log pi f vecchi di {days} giorni. I contatori cumulativi restano invariati.")
         
         # Tabella dettagliata
         st.subheader("Dettagli Accessi")
         
-        # Seleziona colonne da mostrare
-        display_columns = ['login_time', 'user_role', 'environment', 'ip_address']
-        if 'session_duration' in access_logs.columns:
-            display_columns.append('session_duration')
-        if 'pages_visited' in access_logs.columns:
-            display_columns.append('pages_visited')
-        
-        # Filtra solo le colonne che esistono
-        available_columns = [col for col in display_columns if col in access_logs.columns]
-        
-        if available_columns:
-            st.dataframe(access_logs[available_columns], use_container_width=True, hide_index=True)
+        # Mostra i dati in modo semplice per evitare errori CSS
+        for index, row in access_logs.iterrows():
+            with st.expander(f"Accesso {index + 1} - {row.get('login_time', 'N/A')}"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Utente:** {row.get('user_role', 'N/A').upper()}")
+                    st.write(f"**Ambiente:** {row.get('environment', 'N/A').upper()}")
+                with col2:
+                    st.write(f"**IP:** {row.get('ip_address', 'N/A')}")
+                    if 'session_duration' in row and row.get('session_duration'):
+                        st.write(f"**Durata:** {row.get('session_duration')} minuti")
         
     else:
+        # Mostra comunque i cumulativi anche se non ci sono righe recenti
+        top1, top2 = st.columns(2)
+        with top1:
+            st.metric("Accessi Totali (cumulativo)", total_accesses_cum)
+        with top2:
+            st.metric("Visualizzazioni Totali", total_views_cum)
         st.info("Nessun accesso registrato ancora.")
 
 # Footer

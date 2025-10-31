@@ -20,6 +20,7 @@ timeout /t 5 /nobreak >nul
 
 REM Avvia Streamlit
 echo Avvio Streamlit WEB (senza apertura automatica browser)...
+set APP_ENV=web
 python -m streamlit run app_web.py --server.port 8502 --server.headless true
 
 echo.

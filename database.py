@@ -67,6 +67,36 @@ MAPPATURE_DISPONIBILI = {
     'new_leagues': MAPPATURA_NEW_LEAGUES
 }
 
+# Elenco campionati da nascondere dai filtri (case-insensitive)
+DIVISION_BLACKLIST = {
+    'challenge league',
+}
+
+# Mappa nomi campionati -> etichette da mostrare in UI
+DIVISION_DISPLAY_MAP = {
+    'Allsvenskan': 'SWE - Svezia Allsvenskan',
+    'Bundesliga': 'AUT - Austria Bundesliga',
+    'Copa De La Liga Profesional': 'AR - Argentina Copa De La Liga',
+    'Ekstraklasa': 'POL - Polonia Ekstraklasa',
+    'Eliteserien': 'NOR - Norvegia Eliteserien',
+    'J1 League': 'JPN - Giappone Lega J1',
+    'Liga MX': 'MEX - Messico Liga MX',
+    'MLS': 'MLS - Stati Uniti Major League Soccer',
+    'Premier Division': 'IRL- Irlanda Premier Division',
+    'Premier League': 'RUS - Russia Premier League',
+    'Serie A': 'BRA - Brasile Serie A BETANO',
+    'Super League': 'CHN - Cina Super League',
+    'Superliga': 'ROU - Romania Liga 1',
+    'Torneo De La Liga Profesional': 'ARG - Argentina Torneo Betano',
+    'Veikkausliiga': 'FIN - Finlandia Veikkausliiga',
+}
+
+def get_division_display_name(name: str) -> str:
+    if name is None:
+        return ''
+    key = str(name).strip()
+    return DIVISION_DISPLAY_MAP.get(key, key)
+
 class FootballDatabase:
     def __init__(self, environment="test"):
         """
@@ -212,6 +242,8 @@ class FootballDatabase:
                 all_sheets = []
                 for sheet_name in excel_file.sheet_names:
                     df_sheet = pd.read_excel(file_path, sheet_name=sheet_name)
+                    # Tieni traccia del foglio per eventuale fallback del campionato
+                    df_sheet['__sheet_name'] = str(sheet_name)
                     logger.info(f"Foglio {sheet_name}: {len(df_sheet)} righe")
                     all_sheets.append(df_sheet)
                 
@@ -236,25 +268,49 @@ class FootballDatabase:
                     df_normalizzato[colonna_dest] = df[colonna_orig]
                 else:
                     df_normalizzato[colonna_dest] = None
+
+            # Normalizza il nome campionato e fallback al nome foglio se mancante
+            if 'div' in df_normalizzato.columns:
+                df_normalizzato['div'] = df_normalizzato['div'].astype(str).str.strip()
+                if '__sheet_name' in df.columns:
+                    mask_missing_div = df_normalizzato['div'].isna() | (df_normalizzato['div'] == '') | (df_normalizzato['div'].str.lower() == 'none')
+                    df_normalizzato.loc[mask_missing_div, 'div'] = df.loc[mask_missing_div, '__sheet_name'].astype(str).str.strip()
             
-            # ESTRAI STAGIONE
-            stagione_mancante = ('season' not in df_normalizzato.columns) or (df_normalizzato['season'].isna().all())
-            
-            if stagione_mancante:
-                if season:
-                    df_normalizzato['season'] = season
-                    logger.info(f"Stagione impostata manualmente: {season}")
+            # GESTIONE STAGIONE
+            # Regola richiesta: per i file standard "all-euro-data-YYYY-YYYY" usare SEMPRE la stagione dal nome file
+            nome_file = os.path.basename(file_path)
+            if mappatura_nome == 'standard':
+                match = re.search(r'(\d{4})-(\d{4})', nome_file)
+                if match:
+                    stagione_estratta = f"{match.group(1)}-{match.group(2)}"
+                    df_normalizzato['season'] = stagione_estratta
+                    logger.info(f"[standard] Stagione forzata dal nome file: {stagione_estratta}")
                 else:
-                    # Estrai stagione dal nome del file
-                    nome_file = os.path.basename(file_path)
-                    match = re.search(r'(\d{4})-(\d{4})', nome_file)
-                    if match:
-                        stagione_estratta = f"{match.group(1)}-{match.group(2)}"
-                        df_normalizzato['season'] = stagione_estratta
-                        logger.info(f"Stagione estratta dal nome file: {stagione_estratta}")
+                    # fallback: come prima
+                    stagione_mancante = ('season' not in df_normalizzato.columns) or (df_normalizzato['season'].isna().all())
+                    if stagione_mancante:
+                        if season:
+                            df_normalizzato['season'] = season
+                            logger.info(f"Stagione impostata manualmente: {season}")
+                        else:
+                            df_normalizzato['season'] = None
+                            logger.warning("Impossibile determinare la stagione (standard, no match nel nome file)")
+            else:
+                # Comportamento precedente: se manca, prova da parametro o nome file
+                stagione_mancante = ('season' not in df_normalizzato.columns) or (df_normalizzato['season'].isna().all())
+                if stagione_mancante:
+                    if season:
+                        df_normalizzato['season'] = season
+                        logger.info(f"Stagione impostata manualmente: {season}")
                     else:
-                        df_normalizzato['season'] = None
-                        logger.warning("Impossibile determinare la stagione!")
+                        match = re.search(r'(\d{4})-(\d{4})', nome_file)
+                        if match:
+                            stagione_estratta = f"{match.group(1)}-{match.group(2)}"
+                            df_normalizzato['season'] = stagione_estratta
+                            logger.info(f"Stagione estratta dal nome file: {stagione_estratta}")
+                        else:
+                            df_normalizzato['season'] = None
+                            logger.warning("Impossibile determinare la stagione!")
             
             # Aggiungi metadata
             df_normalizzato['file_source'] = os.path.basename(file_path)
@@ -262,13 +318,15 @@ class FootballDatabase:
             # Rimuovi righe vuote
             df_normalizzato = df_normalizzato.dropna(subset=['home_team', 'away_team'])
             
-            # CONVERSIONE STAGIONE: se è anno singolo (es: 2021) → convertilo in 2021-2022
+            # CONVERSIONE STAGIONE: normalizza separatori e, se anno singolo (es: 2021) → 2021-2022
             if 'season' in df_normalizzato.columns:
                 def converti_stagione(stagione_str):
                     if pd.isna(stagione_str) or stagione_str == 'None':
                         return None
                     
                     stagione_str = str(stagione_str).strip()
+                    # Normalizza separatori: punto o slash → trattino
+                    stagione_str = stagione_str.replace('/', '-').replace('.', '-')
                     
                     # Se contiene già il trattino, è già in formato corretto
                     if '-' in stagione_str:
@@ -393,14 +451,28 @@ class FootballDatabase:
     def get_available_seasons(self):
         """Ottiene le stagioni disponibili nel database"""
         conn = self.get_connection()
+        # Normalizza a livello di query i separatori e gli spazi
         query = '''
-            SELECT DISTINCT season FROM matches 
-            WHERE season IS NOT NULL 
-            ORDER BY season DESC
+            SELECT DISTINCT 
+                REPLACE(REPLACE(TRIM(season), '.', '-'), '/', '-') AS season
+            FROM matches 
+            WHERE season IS NOT NULL
         '''
-        seasons = pd.read_sql_query(query, conn)
+        seasons_df = pd.read_sql_query(query, conn)
         conn.close()
-        return seasons['season'].tolist()
+
+        # Converte anni singoli 2021 -> 2021-2022 al volo
+        normalized = []
+        for s in seasons_df['season'].astype(str).tolist():
+            s = s.strip()
+            if s.isdigit() and len(s) == 4:
+                anno = int(s)
+                normalized.append(f"{anno}-{anno+1}")
+            else:
+                normalized.append(s)
+
+        # Ordina desc
+        return sorted(set(normalized), reverse=True)
     
     def normalize_season_values(self):
         """Normalizza i formati stagione in tutto il DB (es. 2022.2023 -> 2022-2023, '2022' -> 2022-2023)"""
@@ -408,8 +480,9 @@ class FootballDatabase:
         cursor = conn.cursor()
         # 1) Trim spazi
         cursor.execute("UPDATE matches SET season = TRIM(season) WHERE season IS NOT NULL")
-        # 2) Sostituisci punto con trattino
+        # 2) Sostituisci punto e slash con trattino
         cursor.execute("UPDATE matches SET season = REPLACE(season, '.', '-') WHERE season LIKE '%.%' ")
+        cursor.execute("UPDATE matches SET season = REPLACE(season, '/', '-') WHERE season LIKE '%/%' ")
         # 3) Converti anni singoli in range anno-anno+1
         rows = pd.read_sql_query("SELECT id, season FROM matches WHERE season IS NOT NULL", conn)
         updates = []
@@ -428,25 +501,40 @@ class FootballDatabase:
         """Ottiene le divisioni disponibili nel database"""
         conn = self.get_connection()
         query = '''
-            SELECT DISTINCT div FROM matches 
-            WHERE div IS NOT NULL 
-            ORDER BY div
+            SELECT DISTINCT TRIM(div) AS div FROM matches 
+            WHERE div IS NOT NULL AND TRIM(div) <> ''
         '''
         divisions = pd.read_sql_query(query, conn)
         conn.close()
-        return divisions['div'].tolist()
+        # Applica blacklist case-insensitive
+        raw_list = [d for d in divisions['div'].tolist() if str(d).strip().lower() not in DIVISION_BLACKLIST]
+        # Ordina per etichetta visualizzata (A→Z)
+        decorated = [(get_division_display_name(d).lower(), d) for d in raw_list]
+        decorated.sort(key=lambda t: t[0])
+        return [d for _, d in decorated]
     
     def get_matches_data(self, seasons=None, divisions=None):
-        """Ottiene i dati delle partite filtrati per stagione e divisione"""
+        """Ottiene i dati delle partite filtrati per stagione e divisione.
+        Normalizza le stagioni ('.' e '/' -> '-') per evitare mismatch.
+        """
         conn = self.get_connection()
         
         query = "SELECT * FROM matches WHERE 1=1"
         params = []
         
         if seasons:
-            placeholders = ','.join(['?' for _ in seasons])
-            query += f" AND season IN ({placeholders})"
-            params.extend(seasons)
+            # Normalizza input
+            norm_seasons = []
+            for s in seasons:
+                s = str(s).strip().replace('.', '-').replace('/', '-')
+                # gestisci anni singoli
+                if s.isdigit() and len(s) == 4:
+                    anno = int(s)
+                    s = f"{anno}-{anno+1}"
+                norm_seasons.append(s)
+            placeholders = ','.join(['?' for _ in norm_seasons])
+            query += f" AND REPLACE(REPLACE(TRIM(season), '.', '-'), '/', '-') IN ({placeholders})"
+            params.extend(norm_seasons)
         
         if divisions:
             placeholders = ','.join(['?' for _ in divisions])
@@ -588,3 +676,32 @@ class FootballDatabase:
         conn.commit()
         conn.close()
         return deleted
+
+    # ------------------------------------------------------------------
+    # Supporto eliminazione dati per file sorgente (usato da app_simple)
+    # ------------------------------------------------------------------
+    def delete_file_data(self, file_source_name: str) -> int:
+        """
+        Elimina dal database tutti i record collegati ad uno specifico file sorgente.
+
+        Rimuove:
+        - Righe da `matches` con `file_source = file_source_name`
+        - Voci da `mappature_colonne` con `file_origine = file_source_name`
+
+        Ritorna il numero di partite eliminate dalla tabella `matches`.
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        # Conta righe che verranno eliminate da matches
+        cursor.execute('SELECT COUNT(*) FROM matches WHERE file_source = ?', (file_source_name,))
+        row = cursor.fetchone()
+        deleted_matches = int(row[0]) if row and row[0] is not None else 0
+
+        # Elimina dati
+        cursor.execute('DELETE FROM matches WHERE file_source = ?', (file_source_name,))
+        cursor.execute('DELETE FROM mappature_colonne WHERE file_origine = ?', (file_source_name,))
+
+        conn.commit()
+        conn.close()
+        return deleted_matches

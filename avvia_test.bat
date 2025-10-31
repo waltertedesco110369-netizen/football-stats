@@ -21,6 +21,7 @@ echo Attesa 5 secondi per pulizia completa...
 timeout /t 5 /nobreak >nul
 echo.
 echo Avvio Streamlit TEST (senza apertura automatica browser)...
+set APP_ENV=test
 set STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 set STREAMLIT_SERVER_HEADLESS=true
 python -m streamlit run app_simple.py --server.port 8501
