@@ -1,5 +1,13 @@
 {
-  "Allsvenskan": {
+  "Copa De La Liga Profesional": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "Torneo De La Liga Profesional": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "Bundesliga": {
     "exclude_top": 0,
     "exclude_bottom": 0
   },
@@ -7,15 +15,11 @@
     "exclude_top": 2,
     "exclude_bottom": 0
   },
-  "Bundesliga": {
+  "Serie A": {
     "exclude_top": 0,
     "exclude_bottom": 0
   },
-  "Challenge League": {
-    "exclude_top": 0,
-    "exclude_bottom": 0
-  },
-  "Copa De La Liga Profesional": {
+  "Super League": {
     "exclude_top": 0,
     "exclude_bottom": 0
   },
@@ -47,19 +51,15 @@
     "exclude_top": 0,
     "exclude_bottom": 0
   },
-  "Ekstraklasa": {
-    "exclude_top": 0,
-    "exclude_bottom": 0
-  },
-  "Eliteserien": {
-    "exclude_top": 0,
-    "exclude_bottom": 0
-  },
   "F1": {
     "exclude_top": 0,
     "exclude_bottom": 0
   },
   "F2": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "Veikkausliiga": {
     "exclude_top": 0,
     "exclude_bottom": 0
   },
@@ -72,6 +72,10 @@
     "exclude_bottom": 0
   },
   "I2": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "Premier Division": {
     "exclude_top": 0,
     "exclude_bottom": 0
   },
@@ -91,11 +95,19 @@
     "exclude_top": 0,
     "exclude_bottom": 0
   },
+  "Eliteserien": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
   "P1": {
     "exclude_top": 0,
     "exclude_bottom": 0
   },
-  "Premier Division": {
+  "Ekstraklasa": {
+    "exclude_top": 0,
+    "exclude_bottom": 0
+  },
+  "Superliga": {
     "exclude_top": 0,
     "exclude_bottom": 0
   },
@@ -127,27 +139,11 @@
     "exclude_top": 0,
     "exclude_bottom": 0
   },
-  "Serie A": {
-    "exclude_top": 0,
-    "exclude_bottom": 0
-  },
-  "Super League": {
-    "exclude_top": 0,
-    "exclude_bottom": 0
-  },
-  "Superliga": {
+  "Allsvenskan": {
     "exclude_top": 0,
     "exclude_bottom": 0
   },
   "T1": {
-    "exclude_top": 0,
-    "exclude_bottom": 0
-  },
-  "Torneo De La Liga Profesional": {
-    "exclude_top": 0,
-    "exclude_bottom": 0
-  },
-  "Veikkausliiga": {
     "exclude_top": 0,
     "exclude_bottom": 0
   }

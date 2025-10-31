@@ -249,13 +249,13 @@ st.sidebar.markdown("---")
 st.sidebar.markdown(f"**Pagina Corrente:** {page}")
 
 # Funzione per mostrare le classifiche senza PyArrow
-def show_standings_simple(standings_df, title, show_achievements=False, current_season=None):
+def show_standings_simple(standings_df, title, show_achievements=False, current_season=None, matches_df_for_form=None, standings_type_for_form="total", venue_for_form="TOTALE", form_insert_after=None, form_insert_before=None, show_title=True, show_summary_metrics=True):
     if standings_df.empty:
         st.warning("Nessun dato disponibile per i filtri selezionati.")
         return
     
     # Layout speciale per Under/Over: metriche sulla stessa riga del titolo
-    if "Under/Over" in title:
+    if "Under/Over" in title and show_summary_metrics:
         # Crea una riga con titolo e metriche insieme
         col_title, col1, col2, col3 = st.columns([2, 1, 1, 1])
         
@@ -285,40 +285,110 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
     
     else:
         # Layout normale per le altre classifiche
-        st.subheader(title)
+        if show_title:
+            st.subheader(title)
         
         # Mostra le statistiche principali
-        col1, col2, col3, col4 = st.columns(4)
+        if show_summary_metrics:
+            col1, col2, col3, col4 = st.columns(4)
         
-        with col1:
-            st.metric("Squadre", len(standings_df))
+            with col1:
+                st.metric("Squadre", len(standings_df))
         
-        with col2:
-            if 'PG' in standings_df.columns:
-                total_matches = standings_df['PG'].sum()
-            else:
-                # Fallback per compatibilità
-                total_matches = standings_df['matches_played'].sum() if 'matches_played' in standings_df.columns else 0
-            st.metric("Partite Totali", total_matches)
-        
-        with col3:
-            avg_goals = 0
-            if total_matches > 0:
-                if 'GF' in standings_df.columns:
-                    avg_goals = round(standings_df['GF'].sum() / total_matches, 2)
-                elif 'goals_for' in standings_df.columns:
+            with col2:
+                if 'PG' in standings_df.columns:
+                    total_matches = standings_df['PG'].sum()
+                else:
                     # Fallback per compatibilità
-                    avg_goals = round(standings_df['goals_for'].sum() / total_matches, 2)
-                elif 'under_matches' in standings_df.columns:
-                    # Per classifiche Under/Over, mostra la percentuale media Under
-                    avg_goals = round(standings_df['under_percentage'].mean(), 2)
-            st.metric("Media Gol/Partita" if 'GF' in standings_df.columns or 'goals_for' in standings_df.columns else "Media % Under", avg_goals)
+                    total_matches = standings_df['matches_played'].sum() if 'matches_played' in standings_df.columns else 0
+                st.metric("Partite Totali", total_matches)
+        
+            with col3:
+                avg_goals = 0
+                if total_matches > 0:
+                    if 'GF' in standings_df.columns:
+                        avg_goals = round(standings_df['GF'].sum() / total_matches, 2)
+                    elif 'goals_for' in standings_df.columns:
+                        # Fallback per compatibilità
+                        avg_goals = round(standings_df['goals_for'].sum() / total_matches, 2)
+                    elif 'under_matches' in standings_df.columns:
+                        # Per classifiche Under/Over, mostra la percentuale media Under
+                        avg_goals = round(standings_df['under_percentage'].mean(), 2)
+                st.metric("Media Gol/Partita" if 'GF' in standings_df.columns or 'goals_for' in standings_df.columns else "Media % Under", avg_goals)
         
         # Mostra "Prima in Classifica" solo per classifiche normali (non Under/Over)
-        with col4:
-            best_team = standings_df.iloc[0]['team'] if not standings_df.empty and 'team' in standings_df.columns else 'N/A'
-            st.metric("Prima in Classifica", best_team)
+        if show_summary_metrics:
+            with col4:
+                best_team = standings_df.iloc[0]['team'] if not standings_df.empty and 'team' in standings_df.columns else 'N/A'
+                st.metric("Prima in Classifica", best_team)
     
+    # Se disponibile, calcola la "Forma" (ultime 5) per ogni squadra
+    if matches_df_for_form is not None and not standings_df.empty:
+        try:
+            df_form = matches_df_for_form.copy()
+            # Parsing sicuro della data
+            df_form['date_parsed'] = pd.to_datetime(df_form['date'], errors='coerce')
+
+            def compute_last5(team_name: str):
+                # Filtra per venue richiesto
+                if venue_for_form == "CASA":
+                    team_matches = df_form[df_form['home_team'] == team_name]
+                elif venue_for_form == "FUORI":
+                    team_matches = df_form[df_form['away_team'] == team_name]
+                else:
+                    team_matches = df_form[(df_form['home_team'] == team_name) | (df_form['away_team'] == team_name)]
+
+                team_matches = team_matches.dropna(subset=['date_parsed'])
+                if team_matches.empty:
+                    return ''
+                team_matches = team_matches.sort_values('date_parsed', ascending=False).head(5)
+                symbols = []
+                for _, m in team_matches.iterrows():
+                    team_home = (m['home_team'] == team_name)
+                    # Determina l'esito V/N/P per la squadra in base al tipo classifica
+                    outcome = '?'
+                    if standings_type_for_form == "total":
+                        base_res = str(m.get('ft_result', '')).upper()
+                        if base_res == 'D':
+                            outcome = 'N'
+                        elif base_res == 'H':
+                            outcome = 'V' if team_home else 'P'
+                        elif base_res == 'A':
+                            outcome = 'V' if not team_home else 'P'
+                    elif standings_type_for_form == "first_half":
+                        base_res = str(m.get('ht_result', '')).upper()
+                        if base_res == 'D':
+                            outcome = 'N'
+                        elif base_res == 'H':
+                            outcome = 'V' if team_home else 'P'
+                        elif base_res == 'A':
+                            outcome = 'V' if not team_home else 'P'
+                    elif standings_type_for_form == "second_half":
+                        h2 = (m.get('ft_home_goals', 0) or 0) - (m.get('ht_home_goals', 0) or 0)
+                        a2 = (m.get('ft_away_goals', 0) or 0) - (m.get('ht_away_goals', 0) or 0)
+                        if h2 == a2:
+                            outcome = 'N'
+                        else:
+                            team_won = (h2 > a2 and team_home) or (a2 > h2 and not team_home)
+                            outcome = 'V' if team_won else 'P'
+                    symbols.append(outcome)
+
+                # Render come badge colorati (compatibili HTML su Streamlit/Render) - orizzontali come prima
+                def badge(s):
+                    color = '#28a745' if s == 'V' else ('#f0ad4e' if s == 'N' else ('#dc3545' if s == 'P' else '#6c757d'))
+                    return f"<span style='display:inline-block;background:{color};color:white;border-radius:6px;padding:2px 6px;margin-right:4px;font-weight:600;'>" + s + "</span>"
+
+                return ''.join([badge(s) for s in symbols])
+
+            # Mappa squadra -> forma (supporta 'team' o 'Squadra')
+            team_col = 'team' if 'team' in standings_df.columns else ('Squadra' if 'Squadra' in standings_df.columns else None)
+            if team_col:
+                standings_df = standings_df.copy()
+                standings_df['Forma'] = standings_df[team_col].apply(compute_last5)
+        except Exception:
+            # In caso di problemi, omette la colonna senza rompere la vista
+            pass
+
     # Mostra la classifica usando HTML
     display_df = standings_df.copy()
     
@@ -356,6 +426,29 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
         display_df['draw_percentage'] = display_df['draw_percentage'].astype(str) + '%'
         display_df['loss_percentage'] = display_df['loss_percentage'].astype(str) + '%'
     
+    # Riordina le colonne per inserire "Forma" tra PZ e Traguardo, se presenti
+    if 'Forma' in display_df.columns:
+        cols = list(display_df.columns)
+        cols.remove('Forma')
+        # Calcola posizione desiderata
+        insert_index = None
+        if form_insert_after and form_insert_after in cols:
+            insert_index = cols.index(form_insert_after) + 1
+        elif 'PZ' in cols:
+            insert_index = cols.index('PZ') + 1
+        else:
+            insert_index = len(cols)
+        cols.insert(insert_index, 'Forma')
+        # Se richiesto un prima specifico, riordina per mettere Forma prima di quella colonna
+        if form_insert_before and form_insert_before in cols:
+            cols = [c for c in cols if c != 'Forma']
+            before_index = cols.index(form_insert_before)
+            cols.insert(before_index, 'Forma')
+        # Mantiene Traguardo alla fine se presente
+        if 'Traguardo' in cols:
+            cols = [c for c in cols if c != 'Traguardo'] + ['Traguardo']
+        display_df = display_df[cols]
+
     # Mostra la tabella usando HTML per evitare problemi con pyarrow
     html_table = display_df.to_html(index=False, escape=False)
     
@@ -369,6 +462,10 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
     if 'Traguardo' in display_df.columns:
         traguardo_position = list(display_df.columns).index('Traguardo') + 1
         css_style += f"table.dataframe th:nth-child({traguardo_position}), table.dataframe td:nth-child({traguardo_position}) {{ text-align: left !important; }}"
+    # Allinea anche la colonna Squadra e Forma a sinistra
+    if 'Forma' in display_df.columns:
+        forma_position = list(display_df.columns).index('Forma') + 1
+        css_style += f"table.dataframe th:nth-child({forma_position}), table.dataframe td:nth-child({forma_position}) {{ text-align: left !important; }}"
     
     css_style += "</style>"
     
@@ -608,39 +705,39 @@ elif page == "🏆 Classifiche":
             # Gestisce i diversi tipi di classifiche
             if standings_type == "Totale":
                 standings_df = calculator.calculate_standings(matches_df, "total")
-                show_standings_simple(standings_df, "Classifica Totale", show_achievements=True, current_season=current_season_for_achievements)
+                show_standings_simple(standings_df, "Classifica Totale", show_achievements=True, current_season=current_season_for_achievements, matches_df_for_form=matches_df, standings_type_for_form="total", venue_for_form="TOTALE")
             
             elif standings_type == "I Tempo":
                 standings_df = calculator.calculate_standings(matches_df, "first_half")
-                show_standings_simple(standings_df, "Classifica I Tempo")
+                show_standings_simple(standings_df, "Classifica I Tempo", matches_df_for_form=matches_df, standings_type_for_form="first_half", venue_for_form="TOTALE")
             
             elif standings_type == "II Tempo":
                 standings_df = calculator.calculate_standings(matches_df, "second_half")
-                show_standings_simple(standings_df, "Classifica II Tempo")
+                show_standings_simple(standings_df, "Classifica II Tempo", matches_df_for_form=matches_df, standings_type_for_form="second_half", venue_for_form="TOTALE")
             
             elif standings_type == "Casa":
                 standings_df = calculator.calculate_standings(matches_df, "total", venue_filter="CASA")
-                show_standings_simple(standings_df, "Classifica Casa", show_achievements=True, current_season=current_season_for_achievements)
+                show_standings_simple(standings_df, "Classifica Casa", show_achievements=True, current_season=current_season_for_achievements, matches_df_for_form=matches_df, standings_type_for_form="total", venue_for_form="CASA")
             
             elif standings_type == "Fuori":
                 standings_df = calculator.calculate_standings(matches_df, "total", venue_filter="FUORI")
-                show_standings_simple(standings_df, "Classifica Fuori", show_achievements=True, current_season=current_season_for_achievements)
+                show_standings_simple(standings_df, "Classifica Fuori", show_achievements=True, current_season=current_season_for_achievements, matches_df_for_form=matches_df, standings_type_for_form="total", venue_for_form="FUORI")
             
             elif standings_type == "Casa I Tempo":
                 standings_df = calculator.calculate_standings(matches_df, "first_half", venue_filter="CASA")
-                show_standings_simple(standings_df, "Classifica Casa I Tempo")
+                show_standings_simple(standings_df, "Classifica Casa I Tempo", matches_df_for_form=matches_df, standings_type_for_form="first_half", venue_for_form="CASA")
             
             elif standings_type == "Fuori I Tempo":
                 standings_df = calculator.calculate_standings(matches_df, "first_half", venue_filter="FUORI")
-                show_standings_simple(standings_df, "Classifica Fuori I Tempo")
+                show_standings_simple(standings_df, "Classifica Fuori I Tempo", matches_df_for_form=matches_df, standings_type_for_form="first_half", venue_for_form="FUORI")
             
             elif standings_type == "Casa II Tempo":
                 standings_df = calculator.calculate_standings(matches_df, "second_half", venue_filter="CASA")
-                show_standings_simple(standings_df, "Classifica Casa II Tempo")
+                show_standings_simple(standings_df, "Classifica Casa II Tempo", matches_df_for_form=matches_df, standings_type_for_form="second_half", venue_for_form="CASA")
             
             elif standings_type == "Fuori II Tempo":
                 standings_df = calculator.calculate_standings(matches_df, "second_half", venue_filter="FUORI")
-                show_standings_simple(standings_df, "Classifica Fuori II Tempo")
+                show_standings_simple(standings_df, "Classifica Fuori II Tempo", matches_df_for_form=matches_df, standings_type_for_form="second_half", venue_for_form="FUORI")
             
             elif standings_type == "Con Parametri":
                 col1, col2 = st.columns(2)
@@ -662,7 +759,17 @@ elif page == "🏆 Classifiche":
                 standings_df = calculator.calculate_standings(
                     matches_df, "total", exclude_top, exclude_bottom
                 )
-                show_standings_simple(standings_df, "Classifica con Parametri", show_achievements=True, current_season=current_season_for_achievements)
+                show_standings_simple(
+                    standings_df,
+                    "Classifica con Parametri",
+                    show_achievements=True,
+                    current_season=current_season_for_achievements,
+                    matches_df_for_form=matches_df,
+                    standings_type_for_form="total",
+                    venue_for_form="TOTALE",
+                    form_insert_after="P%",
+                    form_insert_before="PZ"
+                )
         else:
             st.warning("Nessun dato trovato per i filtri selezionati.")
     else:
@@ -915,10 +1022,59 @@ elif page == "📊 Classifiche con Parametri":
                         exclude_bottom_value = st.session_state.divisions_config.get(selected_division, {}).get('exclude_bottom', 0)
                         st.metric("Escludi Ultime", exclude_bottom_value)
                     
-                    # Mostra solo la tabella delle classifiche (senza metriche duplicate)
+                    # Prepara tabella con colonna "Forma" come in Classifiche
                     if not standings_df.empty:
-                        # Mostra la tabella delle classifiche
-                        st.markdown(standings_df.to_html(index=False, escape=False), unsafe_allow_html=True)
+                        try:
+                            df_form_matches = matches_df.copy()
+                            df_form_matches['date_parsed'] = pd.to_datetime(df_form_matches['date'], errors='coerce')
+
+                            def compute_last5(team_name: str):
+                                tm = df_form_matches[(df_form_matches['home_team'] == team_name) | (df_form_matches['away_team'] == team_name)].dropna(subset=['date_parsed'])
+                                if tm.empty:
+                                    return ''
+                                tm = tm.sort_values('date_parsed', ascending=False).head(5)
+                                symbols = []
+                                for _, m in tm.iterrows():
+                                    team_home = (m['home_team'] == team_name)
+                                    base_res = str(m.get('ft_result', '')).upper()
+                                    if base_res == 'D':
+                                        symbols.append('N')
+                                    elif base_res == 'H':
+                                        symbols.append('V' if team_home else 'P')
+                                    elif base_res == 'A':
+                                        symbols.append('V' if not team_home else 'P')
+                                    else:
+                                        symbols.append('?')
+                                def badge(s):
+                                    color = '#28a745' if s == 'V' else ('#f0ad4e' if s == 'N' else ('#dc3545' if s == 'P' else '#6c757d'))
+                                    return f"<span style='display:inline-block;background:{color};color:white;border-radius:6px;padding:2px 6px;margin-right:4px;font-weight:600;'>" + s + "</span>"
+                                return ''.join(badge(s) for s in symbols)
+
+                            display_df = standings_df.copy()
+                            # Aggiungi Forma usando colonna team
+                            team_col = 'team' if 'team' in display_df.columns else ('Squadra' if 'Squadra' in display_df.columns else None)
+                            if team_col:
+                                display_df['Forma'] = display_df[team_col].apply(compute_last5)
+                            # Rinomina team -> Squadra
+                            if 'team' in display_df.columns:
+                                display_df = display_df.rename(columns={'team': 'Squadra'})
+                            # Posiziona Forma dopo P% e prima di PZ
+                            if 'Forma' in display_df.columns:
+                                cols = list(display_df.columns)
+                                cols.remove('Forma')
+                                insert_index = cols.index('P%') + 1 if 'P%' in cols else (cols.index('PZ') if 'PZ' in cols else len(cols))
+                                cols.insert(insert_index, 'Forma')
+                                if 'PZ' in cols:
+                                    # garantisci che Forma sia prima di PZ
+                                    cols = [c for c in cols if c != 'Forma']
+                                    cols.insert(cols.index('PZ'), 'Forma')
+                                display_df = display_df[cols]
+                        except Exception:
+                            display_df = standings_df.copy()
+                            if 'team' in display_df.columns:
+                                display_df = display_df.rename(columns={'team': 'Squadra'})
+
+                        st.markdown(display_df.to_html(index=False, escape=False), unsafe_allow_html=True)
                 else:
                     st.warning("Nessuna classifica disponibile con i parametri selezionati")
             else:
@@ -1139,8 +1295,16 @@ elif page == "🏆 Best Teams":
                     # Rimuovi la colonna temporanea
                     best_teams_df = best_teams_df.drop('Max_Percentage', axis=1)
                     
-                    # Mostra la classifica
-                    show_standings_simple(best_teams_df, f"Best Teams (Soglia: {percentage_threshold}%)")
+                    # Mostra la classifica con colonna Forma tra P% e Gioca
+                    show_standings_simple(
+                        best_teams_df,
+                        f"Best Teams (Soglia: {percentage_threshold}%)",
+                        matches_df_for_form=matches_df,
+                        standings_type_for_form="total",
+                        venue_for_form="TOTALE",
+                        form_insert_after="P%",
+                        form_insert_before="Gioca"
+                    )
                 else:
                     st.warning(f"Nessuna squadra supera la soglia del {percentage_threshold}%")
             
@@ -1251,11 +1415,18 @@ elif page == "🏆 Best Teams":
                     with col3:
                         st.metric("Media Gol/Partita", avg_goals)
                     
-                    # Mostra la classifica senza sottotitolo e senza statistiche duplicate
-                    display_df = best_teams_df.copy()
-                    
-                    # Mostra la classifica usando HTML
-                    st.markdown(display_df.to_html(index=False, escape=False), unsafe_allow_html=True)
+                    # Mostra la classifica con Forma, senza titolo/metriche per evitare duplicazione
+                    show_standings_simple(
+                        best_teams_df,
+                        "Classifica BEST con Parametri",
+                        matches_df_for_form=matches_df,
+                        standings_type_for_form="total",
+                        venue_for_form="TOTALE",
+                        form_insert_after="P%",
+                        form_insert_before="Gioca",
+                        show_title=False,
+                        show_summary_metrics=False
+                    )
                 else:
                     st.warning(f"Nessuna squadra supera la soglia del {percentage_threshold}%")
             
