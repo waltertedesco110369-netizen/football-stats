@@ -268,15 +268,19 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
         with col2:
             if 'PG' in standings_df.columns:
                 total_matches = standings_df['PG'].sum()
+                # Dividi per 2 perché ogni partita è contata due volte (una per squadra)
+                total_matches_unique = total_matches // 2
             else:
                 total_matches = standings_df['matches_played'].sum() if 'matches_played' in standings_df.columns else 0
-            st.metric("Partite Totali", total_matches)
+                total_matches_unique = total_matches
+            st.metric("Partite Totali", total_matches_unique)
         
         with col3:
             avg_goals = 0
-            if total_matches > 0:
+            if total_matches_unique > 0:
                 if 'GF' in standings_df.columns:
-                    avg_goals = round(standings_df['GF'].sum() / total_matches, 2)
+                    # Usa total_matches_unique che è già diviso per 2
+                    avg_goals = round((standings_df['GF'].sum() + standings_df['GS'].sum()) / total_matches_unique, 2)
                 elif 'goals_for' in standings_df.columns:
                     avg_goals = round(standings_df['goals_for'].sum() / total_matches, 2)
                 elif 'under_matches' in standings_df.columns:
@@ -298,16 +302,20 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
             with col2:
                 if 'PG' in standings_df.columns:
                     total_matches = standings_df['PG'].sum()
+                    # Dividi per 2 perché ogni partita è contata due volte (una per squadra)
+                    total_matches_unique = total_matches // 2
                 else:
                     # Fallback per compatibilità
                     total_matches = standings_df['matches_played'].sum() if 'matches_played' in standings_df.columns else 0
-                st.metric("Partite Totali", total_matches)
+                    total_matches_unique = total_matches
+                st.metric("Partite Totali", total_matches_unique)
         
             with col3:
                 avg_goals = 0
-                if total_matches > 0:
+                if total_matches_unique > 0:
                     if 'GF' in standings_df.columns:
-                        avg_goals = round(standings_df['GF'].sum() / total_matches, 2)
+                        # Usa total_matches_unique che è già diviso per 2
+                        avg_goals = round((standings_df['GF'].sum() + standings_df['GS'].sum()) / total_matches_unique, 2)
                     elif 'goals_for' in standings_df.columns:
                         # Fallback per compatibilità
                         avg_goals = round(standings_df['goals_for'].sum() / total_matches, 2)
@@ -392,6 +400,10 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
     # Mostra la classifica usando HTML
     display_df = standings_df.copy()
     
+    # Rimuovi colonna G/P se presente (non necessaria e calcolata in modo errato)
+    if 'G/P' in display_df.columns:
+        display_df = display_df.drop('G/P', axis=1)
+    
     # Rinomina la colonna team in Squadra
     if 'team' in display_df.columns:
         display_df = display_df.rename(columns={'team': 'Squadra'})
@@ -462,10 +474,13 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
     if 'Traguardo' in display_df.columns:
         traguardo_position = list(display_df.columns).index('Traguardo') + 1
         css_style += f"table.dataframe th:nth-child({traguardo_position}), table.dataframe td:nth-child({traguardo_position}) {{ text-align: left !important; }}"
-    # Allinea anche la colonna Squadra e Forma a sinistra
+    # Allinea anche la colonna Squadra, Forma e ULTIME 5 a sinistra
     if 'Forma' in display_df.columns:
         forma_position = list(display_df.columns).index('Forma') + 1
         css_style += f"table.dataframe th:nth-child({forma_position}), table.dataframe td:nth-child({forma_position}) {{ text-align: left !important; }}"
+    if 'ULTIME 5' in display_df.columns:
+        ultime5_position = list(display_df.columns).index('ULTIME 5') + 1
+        css_style += f"table.dataframe th:nth-child({ultime5_position}), table.dataframe td:nth-child({ultime5_position}) {{ text-align: left !important; white-space: nowrap !important; min-width: 140px !important; }}"
     
     css_style += "</style>"
     
@@ -881,6 +896,66 @@ elif page == "📊 Under/Over":
             # Calcola classifica Under/Over
             standings_df_uo = calculator.calculate_under_over_standings(matches_df_uo, threshold, venue_param, time_param)
             
+            # Ordina per la percentuale più alta (max tra U% e O%), dalla più alta alla più bassa
+            if not standings_df_uo.empty and 'U%' in standings_df_uo.columns and 'O%' in standings_df_uo.columns:
+                standings_df_uo['Max_Percentage'] = standings_df_uo[['U%', 'O%']].max(axis=1)
+                standings_df_uo = standings_df_uo.sort_values(by='Max_Percentage', ascending=False).reset_index(drop=True)
+                standings_df_uo = standings_df_uo.drop('Max_Percentage', axis=1)
+            
+            # Aggiungi colonna "ULTIME 5" per Under/Over
+            if not standings_df_uo.empty:
+                def compute_last5_uo(team_name: str):
+                    # Prendi tutte le partite della squadra
+                    team_matches = matches_df_uo[(matches_df_uo['home_team'] == team_name) | (matches_df_uo['away_team'] == team_name)].copy()
+                    
+                    # Parse date
+                    team_matches['date_parsed'] = pd.to_datetime(team_matches['date'], errors='coerce')
+                    team_matches = team_matches.dropna(subset=['date_parsed'])
+                    
+                    if team_matches.empty:
+                        return ''
+                    
+                    # Ordina per data (più recente prima)
+                    team_matches = team_matches.sort_values('date_parsed', ascending=False).head(5)
+                    
+                    symbols = []
+                    for _, m in team_matches.iterrows():
+                        # Calcola gol in base al filtro tempo
+                        if time_param == "I TEMPO":
+                            home_goals = pd.to_numeric(m.get('ht_home_goals', 0), errors='coerce') or 0
+                            away_goals = pd.to_numeric(m.get('ht_away_goals', 0), errors='coerce') or 0
+                        elif time_param == "II TEMPO":
+                            home_goals = (pd.to_numeric(m.get('ft_home_goals', 0), errors='coerce') or 0) - (pd.to_numeric(m.get('ht_home_goals', 0), errors='coerce') or 0)
+                            away_goals = (pd.to_numeric(m.get('ft_away_goals', 0), errors='coerce') or 0) - (pd.to_numeric(m.get('ht_away_goals', 0), errors='coerce') or 0)
+                        else:  # TOTALE
+                            home_goals = pd.to_numeric(m.get('ft_home_goals', 0), errors='coerce') or 0
+                            away_goals = pd.to_numeric(m.get('ft_away_goals', 0), errors='coerce') or 0
+                        
+                        total_goals = home_goals + away_goals
+                        
+                        # Determina Over o Under
+                        if total_goals < threshold:
+                            symbols.append('U')  # Under
+                        else:
+                            symbols.append('O')  # Over
+                    
+                    # Render come badge colorati: Verde + per Over, Rosso - per Under
+                    def badge_uo(s):
+                        if s == 'O':
+                            return f"<span style='display:inline-block;background:#28a745;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;'>+</span>"
+                        else:  # U
+                            return f"<span style='display:inline-block;background:#dc3545;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;'>-</span>"
+                    
+                    # Avvolgi i badge in un container flex per evitare il wrap verticale
+                    badges_html = ''.join([badge_uo(s) for s in symbols])
+                    return f"<div style='display:flex;flex-wrap:nowrap;white-space:nowrap;align-items:center;'>{badges_html}</div>"
+                
+                # Aggiungi colonna ULTIME 5
+                team_col = 'team' if 'team' in standings_df_uo.columns else ('Squadra' if 'Squadra' in standings_df_uo.columns else None)
+                if team_col:
+                    standings_df_uo = standings_df_uo.copy()
+                    standings_df_uo['ULTIME 5'] = standings_df_uo[team_col].apply(compute_last5_uo)
+            
             # Usa show_standings_simple per visualizzare (come in Best Teams)
             show_standings_simple(standings_df_uo, f"Classifica Under/Over {threshold}")
         else:
@@ -1010,7 +1085,9 @@ elif page == "📊 Classifiche con Parametri":
                     
                     with col2:
                         total_matches = standings_df['PG'].sum()
-                        st.metric("Partite Totali", total_matches)
+                        # Dividi per 2 perché ogni partita è contata due volte (una per squadra)
+                        total_matches_unique = total_matches // 2
+                        st.metric("Partite Totali", total_matches_unique)
                     
                     with col3:
                         # Usa i valori dalla config del campionato selezionato
@@ -1404,14 +1481,24 @@ elif page == "🏆 Best Teams":
                     # Mostra solo le statistiche delle squadre filtrate
                     total_teams = len(best_teams_df)
                     total_matches = best_teams_df['PG'].sum()
-                    avg_goals = round(best_teams_df['PG'].sum() / len(best_teams_df) if len(best_teams_df) > 0 else 0, 2)
+                    # Dividi per 2 perché ogni partita è contata due volte (una per squadra)
+                    total_matches_unique = total_matches // 2
+                    
+                    # Calcola media gol/partita solo se le colonne GF e GS esistono
+                    avg_goals = 0
+                    if total_matches_unique > 0:
+                        if 'GF' in best_teams_df.columns and 'GS' in best_teams_df.columns:
+                            avg_goals = round((best_teams_df['GF'].sum() + best_teams_df['GS'].sum()) / total_matches_unique, 2)
+                        elif 'G/P' in best_teams_df.columns:
+                            # Per Under/Over usa la colonna G/P se disponibile
+                            avg_goals = round(best_teams_df['G/P'].mean(), 2)
                     
                     # Mostra statistiche filtrate
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         st.metric("Squadre", total_teams)
                     with col2:
-                        st.metric("Partite Totali", total_matches)
+                        st.metric("Partite Totali", total_matches_unique)
                     with col3:
                         st.metric("Media Gol/Partita", avg_goals)
                     
@@ -1431,31 +1518,117 @@ elif page == "🏆 Best Teams":
                     st.warning(f"Nessuna squadra supera la soglia del {percentage_threshold}%")
             
             with tab3:
-                st.subheader("Classifica BEST Under/Over")
+                # Inizializza soglia di default se non presente
+                if 'selected_threshold_best_uo' not in st.session_state:
+                    st.session_state.selected_threshold_best_uo = 2.5
                 
-                threshold = st.selectbox(
-                    "Soglia Under/Over",
-                    [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5],
-                    index=2,
-                    key="best_under_over"
-                )
+                # Pulsanti soglie cliccabili (come nella pagina Under/Over)
+                st.write("**Soglie Under/Over:**")
+                threshold_cols = st.columns([0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.2])
+                thresholds = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
+                
+                for i, th in enumerate(thresholds):
+                    with threshold_cols[i]:
+                        if st.button(f"{th}", key=f"best_uo_threshold_{th}"):
+                            st.session_state.selected_threshold_best_uo = th
+                            st.rerun()
+                
+                # Usa la soglia selezionata
+                threshold = st.session_state.selected_threshold_best_uo
                 
                 standings_df = calculator.calculate_under_over_standings(matches_df, threshold)
+                
+                # Filtra solo le squadre con U% o O% >= alla soglia percentuale
+                if not standings_df.empty and 'U%' in standings_df.columns and 'O%' in standings_df.columns:
+                    standings_df = standings_df[
+                        (standings_df['U%'] >= percentage_threshold) | 
+                        (standings_df['O%'] >= percentage_threshold)
+                    ]
+                    
+                    # Ordina per la percentuale più alta (max tra U% e O%), dalla più alta alla più bassa
+                    standings_df['Max_Percentage'] = standings_df[['U%', 'O%']].max(axis=1)
+                    standings_df = standings_df.sort_values(by='Max_Percentage', ascending=False).reset_index(drop=True)
+                    standings_df = standings_df.drop('Max_Percentage', axis=1)
+                    
+                    # Aggiungi colonna "ULTIME 5" per Under/Over
+                    def compute_last5_uo_best(team_name: str):
+                        # Prendi tutte le partite della squadra
+                        team_matches = matches_df[(matches_df['home_team'] == team_name) | (matches_df['away_team'] == team_name)].copy()
+                        
+                        # Parse date
+                        team_matches['date_parsed'] = pd.to_datetime(team_matches['date'], errors='coerce')
+                        team_matches = team_matches.dropna(subset=['date_parsed'])
+                        
+                        if team_matches.empty:
+                            return ''
+                        
+                        # Ordina per data (più recente prima)
+                        team_matches = team_matches.sort_values('date_parsed', ascending=False).head(5)
+                        
+                        symbols = []
+                        for _, m in team_matches.iterrows():
+                            # Calcola gol totali
+                            home_goals = pd.to_numeric(m.get('ft_home_goals', 0), errors='coerce') or 0
+                            away_goals = pd.to_numeric(m.get('ft_away_goals', 0), errors='coerce') or 0
+                            total_goals = home_goals + away_goals
+                            
+                            # Determina Over o Under
+                            if total_goals < threshold:
+                                symbols.append('U')  # Under
+                            else:
+                                symbols.append('O')  # Over
+                        
+                        # Render come badge colorati: Verde + per Over, Rosso - per Under
+                        def badge_uo(s):
+                            if s == 'O':
+                                return f"<span style='display:inline-block;background:#28a745;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;'>+</span>"
+                            else:  # U
+                                return f"<span style='display:inline-block;background:#dc3545;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;'>-</span>"
+                        
+                        # Avvolgi i badge in un container flex per evitare il wrap verticale
+                        badges_html = ''.join([badge_uo(s) for s in symbols])
+                        return f"<div style='display:flex;flex-wrap:nowrap;white-space:nowrap;align-items:center;'>{badges_html}</div>"
+                    
+                    # Aggiungi colonna ULTIME 5
+                    team_col = 'team' if 'team' in standings_df.columns else ('Squadra' if 'Squadra' in standings_df.columns else None)
+                    if team_col:
+                        standings_df = standings_df.copy()
+                        standings_df['ULTIME 5'] = standings_df[team_col].apply(compute_last5_uo_best)
+                
                 show_standings_simple(standings_df, f"Classifica BEST Under/Over {threshold}")
             
             with tab4:
-                st.subheader("Classifica U/O Totale")
+                # Inizializza soglie selezionate se non presente
+                if 'selected_thresholds_uo_totale' not in st.session_state:
+                    st.session_state.selected_thresholds_uo_totale = [2.5]  # Default: solo 2.5
                 
-                threshold_uo = st.selectbox(
-                    "Soglia Percentuale (%)",
-                    [70, 75, 80, 85, 90],
-                    index=2,
-                    key="best_uo_totale"
-                )
+                # Pulsanti soglie cliccabili con selezione multipla
+                st.write("**Soglie Under/Over:**")
+                threshold_cols = st.columns([0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 3.2])
+                available_thresholds = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
                 
-                # Calcola statistiche per ogni squadra su tutte le soglie
+                for i, th in enumerate(available_thresholds):
+                    with threshold_cols[i]:
+                        # Determina se la soglia è selezionata
+                        is_selected = th in st.session_state.selected_thresholds_uo_totale
+                        
+                        # Stile del pulsante basato sulla selezione
+                        button_label = f"{th}"
+                        button_key = f"uo_totale_threshold_{th}"
+                        
+                        if st.button(button_label, key=button_key, type="primary" if is_selected else "secondary"):
+                            # Toggle selezione: aggiungi se non presente, rimuovi se presente
+                            if th in st.session_state.selected_thresholds_uo_totale:
+                                st.session_state.selected_thresholds_uo_totale.remove(th)
+                            else:
+                                st.session_state.selected_thresholds_uo_totale.append(th)
+                            st.rerun()
+                
+                # Usa solo le soglie selezionate (se nessuna è selezionata, usa tutte)
+                selected_thresholds = st.session_state.selected_thresholds_uo_totale if st.session_state.selected_thresholds_uo_totale else available_thresholds
+                
+                # Calcola statistiche per ogni squadra solo sulle soglie selezionate
                 teams_stats_all = []
-                all_thresholds = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5]
                 
                 for team in matches_df['home_team'].unique():
                     team_stats = {}
@@ -1463,8 +1636,8 @@ elif page == "🏆 Best Teams":
                     best_percentage = 0
                     best_type = None  # 'O' o 'U'
                     
-                    # Calcola per ogni soglia
-                    for th in all_thresholds:
+                    # Calcola solo per le soglie selezionate
+                    for th in selected_thresholds:
                         stats = calculator._calculate_under_over_stats(matches_df, team, th, "TOTALE", "TOTALE")
                         if stats:
                             pg = stats.get('PG', 0)
@@ -1482,8 +1655,8 @@ elif page == "🏆 Best Teams":
                                     best_threshold = th
                                     best_type = 'O'
                     
-                    # Se supera la soglia specificata
-                    if best_percentage >= threshold_uo:
+                    # Se supera la soglia percentuale globale
+                    if best_percentage >= percentage_threshold:
                         team_stats = calculator._calculate_under_over_stats(matches_df, team, best_threshold, "TOTALE", "TOTALE")
                         if team_stats:
                             team_stats['Squadra'] = team
@@ -1502,11 +1675,78 @@ elif page == "🏆 Best Teams":
                     best_uo_df = pd.DataFrame(teams_stats_all)
                     # Ordina per % decrescente
                     best_uo_df = best_uo_df.sort_values('%', ascending=False)
-                    # Mostra solo le colonne necessarie
-                    display_df = best_uo_df[['Squadra', 'PG', 'U', 'O', 'U%', 'O%', 'Pron', 'Gioca', '%']]
+                    
+                    # Mostra metriche: Squadre, Partite Totali, Media Gol/Partita
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Squadre", len(best_uo_df))
+                    with col2:
+                        total_matches = best_uo_df['PG'].sum()
+                        # Dividi per 2 perché ogni partita è contata due volte (una per squadra)
+                        total_matches_unique = total_matches // 2
+                        st.metric("Partite Totali", total_matches_unique)
+                    with col3:
+                        if total_matches_unique > 0:
+                            # Calcola media gol/partita usando GF e GS se disponibili
+                            if 'GF' in best_uo_df.columns and 'GS' in best_uo_df.columns:
+                                avg_goals = round((best_uo_df['GF'].sum() + best_uo_df['GS'].sum()) / total_matches_unique, 2)
+                            else:
+                                # Fallback: calcola dalla colonna % se non ci sono GF/GS
+                                avg_goals = 0
+                        else:
+                            avg_goals = 0
+                        st.metric("Media Gol/Partita", avg_goals)
+                    
+                    # Aggiungi colonna "ULTIME 5" per Under/Over
+                    def badge_uo(s):
+                        if s == 'O':
+                            return f"<span style='display:inline-block;background:#28a745;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;'>+</span>"
+                        else:  # U
+                            return f"<span style='display:inline-block;background:#dc3545;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;'>-</span>"
+                    
+                    def compute_last5_uo_totale(row):
+                        team_name = row['Squadra']
+                        best_threshold = row['Pron']
+                        
+                        # Prendi tutte le partite della squadra
+                        team_matches = matches_df[(matches_df['home_team'] == team_name) | (matches_df['away_team'] == team_name)].copy()
+                        
+                        # Parse date
+                        team_matches['date_parsed'] = pd.to_datetime(team_matches['date'], errors='coerce')
+                        team_matches = team_matches.dropna(subset=['date_parsed'])
+                        
+                        if team_matches.empty:
+                            return ''
+                        
+                        # Ordina per data (più recente prima)
+                        team_matches = team_matches.sort_values('date_parsed', ascending=False).head(5)
+                        
+                        symbols = []
+                        for _, m in team_matches.iterrows():
+                            # Calcola gol totali
+                            home_goals = pd.to_numeric(m.get('ft_home_goals', 0), errors='coerce') or 0
+                            away_goals = pd.to_numeric(m.get('ft_away_goals', 0), errors='coerce') or 0
+                            total_goals = home_goals + away_goals
+                            
+                            # Determina Over o Under usando la soglia migliore per questa squadra
+                            if total_goals < best_threshold:
+                                symbols.append('U')  # Under
+                            else:
+                                symbols.append('O')  # Over
+                        
+                        # Render come badge colorati: Verde + per Over, Rosso - per Under
+                        # Avvolgi i badge in un container flex per evitare il wrap verticale
+                        badges_html = ''.join([badge_uo(s) for s in symbols])
+                        return f"<div style='display:flex;flex-wrap:nowrap;white-space:nowrap;align-items:center;'>{badges_html}</div>"
+                    
+                    # Aggiungi colonna ULTIME 5
+                    best_uo_df['ULTIME 5'] = best_uo_df.apply(compute_last5_uo_totale, axis=1)
+                    
+                    # Mostra solo le colonne necessarie (incluse ULTIME 5)
+                    display_df = best_uo_df[['Squadra', 'PG', 'U', 'O', 'U%', 'O%', 'Pron', 'Gioca', '%', 'ULTIME 5']]
                     st.markdown(display_df.to_html(index=False, escape=False), unsafe_allow_html=True)
                 else:
-                    st.warning(f"Nessuna squadra supera la soglia del {threshold_uo}%")
+                    st.warning(f"Nessuna squadra supera la soglia del {percentage_threshold}%")
         else:
             st.warning("Nessun dato trovato per le stagioni selezionate.")
     else:

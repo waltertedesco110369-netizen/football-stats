@@ -420,7 +420,7 @@ class FootballStatsCalculator:
             'O': over_matches,
             'GF': goals_for,
             'GS': goals_against,
-            'G/P': round(goals_for / total_matches, 2) if total_matches > 0 else 0
+            'G/P': round((goals_for + goals_against) / total_matches, 2) if total_matches > 0 else 0
         }
     
     def calculate_best_standings(self, matches_df, percentage_type="wins", exclude_top=None, exclude_bottom=None):
