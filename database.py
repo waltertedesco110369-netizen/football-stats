@@ -72,8 +72,26 @@ DIVISION_BLACKLIST = {
     'challenge league',
 }
 
+# ============================================================================
+# ⚠️ PROTEZIONE NOMI CAMPIONATI ⚠️
+# ============================================================================
+# ATTENZIONE: I nomi dei campionati qui sotto sono PROTETTI.
+# 
+# REGOLE:
+# 1. NON MODIFICARE i nomi dei campionati esistenti senza richiesta esplicita
+# 2. I nuovi campionati aggiunti NON sono protetti fino a specifica richiesta
+# 3. Per modificare un campionato protetto:
+#    - Deve essere chiaramente indicato nella richiesta che si è consapevoli della protezione
+#    - Dopo la modifica, verrà chiesto se si vuole proteggere di nuovo
+# 4. Per proteggere un nuovo campionato: richiedere esplicitamente la protezione
+#
+# Per modificare i nomi PROTETTI, scrivere nella richiesta:
+# "Modifico il campionato PROTETTO [nome_campionato] a [nuovo_nome]"
+# ============================================================================
+
 # Mappa nomi campionati -> etichette da mostrare in UI
 DIVISION_DISPLAY_MAP = {
+    # ⚠️ PROTETTI - Non modificare senza richiesta esplicita
     'Allsvenskan': 'SWE - Svezia Allsvenskan',
     'Bundesliga': 'AUT - Austria Bundesliga',
     'Copa De La Liga Profesional': 'AR - Argentina Copa De La Liga',
@@ -89,7 +107,47 @@ DIVISION_DISPLAY_MAP = {
     'Superliga': 'ROU - Romania Liga 1',
     'Torneo De La Liga Profesional': 'ARG - Argentina Torneo Betano',
     'Veikkausliiga': 'FIN - Finlandia Veikkausliiga',
+    # Campionati con codici - ⚠️ PROTETTI
+    'B1': 'B1 - Belgio Jupiler Pro League',
+    'D1': 'D1 - Germania Bundesliga',
+    'D2': 'D2 - Germania 2. Bundesliga',
+    'E0': 'E0 - Inghilterra Premier League',
+    'E1': 'E1 - Inghilterra Championship',
+    'E2': 'E2 - Inghilterra League One',
+    'E3': 'E3 - Inghilterra League Two',
+    'EC': 'EC - Inghilterra Conference',
+    'F1': 'F1 - Francia Ligue 1',
+    'F2': 'F2 - Francia Ligue 2',
+    'G1': 'G1 - Grecia Super League',
+    'I1': 'I1 - Italia Serie A',
+    'I2': 'I2 - Italia Serie B',
+    'N1': 'N1 - Olanda Eredivisie',
+    'P1': 'P1 - Portogallo Primeira Liga',
+    'SC0': 'SC0 - Scozia Premiership',
+    'SC1': 'SC1 - Scozia Championship',
+    'SC2': 'SC2 - Scozia League One',
+    'SC3': 'SC3 - Scozia Lega Due',
+    'SP1': 'SP1 - Spagna La Liga',
+    'SP2': 'SP2 - Spagna Segunda Divisione',
+    'T1': 'T1 - Turchia Super Lig',
+    # NOTA: I nuovi campionati aggiunti qui sotto NON sono protetti automaticamente
+    # Per proteggerli, richiedere esplicitamente: "Proteggi il campionato [nome]"
 }
+
+# Set dei campionati PROTETTI (non modificabili senza richiesta esplicita)
+# Questo set contiene tutti i campionati esistenti al momento della creazione della protezione
+PROTECTED_DIVISIONS = frozenset([
+    'Allsvenskan', 'Bundesliga', 'Copa De La Liga Profesional', 'Ekstraklasa',
+    'Eliteserien', 'J1 League', 'Liga MX', 'MLS', 'Premier Division',
+    'Premier League', 'Serie A', 'Super League', 'Superliga',
+    'Torneo De La Liga Profesional', 'Veikkausliiga',
+    'B1', 'D1', 'D2', 'E0', 'E1', 'E2', 'E3', 'EC', 'F1', 'F2', 'G1',
+    'I1', 'I2', 'N1', 'P1', 'SC0', 'SC1', 'SC2', 'SC3', 'SP1', 'SP2', 'T1'
+])
+
+def is_division_protected(division_name: str) -> bool:
+    """Verifica se un campionato è protetto (non modificabile senza richiesta esplicita)"""
+    return division_name in PROTECTED_DIVISIONS
 
 def get_division_display_name(name: str) -> str:
     if name is None:
@@ -193,6 +251,34 @@ class FootballDatabase:
                 key TEXT PRIMARY KEY,
                 value INTEGER DEFAULT 0
             )
+        ''')
+        
+        # Tabella per le sessioni di chat
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Tabella per i messaggi delle chat
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Indice per migliorare le query sui messaggi
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id 
+            ON chat_messages(session_id)
         ''')
         
         conn.commit()
@@ -705,3 +791,145 @@ class FootballDatabase:
         conn.commit()
         conn.close()
         return deleted_matches
+    
+    # ------------------------------------------------------------------
+    # Gestione Chat e Cronologia
+    # ------------------------------------------------------------------
+    def create_chat_session(self, title: str = None) -> int:
+        """Crea una nuova sessione di chat e ritorna l'ID della sessione"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        if not title:
+            title = f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
+        cursor.execute('''
+            INSERT INTO chat_sessions (title, updated_at)
+            VALUES (?, CURRENT_TIMESTAMP)
+        ''', (title,))
+        
+        session_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Nuova sessione chat creata: ID {session_id}, titolo: {title}")
+        return session_id
+    
+    def add_chat_message(self, session_id: int, role: str, content: str) -> None:
+        """Aggiunge un messaggio a una sessione di chat"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO chat_messages (session_id, role, content)
+            VALUES (?, ?, ?)
+        ''', (session_id, role, content))
+        
+        # Aggiorna updated_at della sessione
+        cursor.execute('''
+            UPDATE chat_sessions 
+            SET updated_at = CURRENT_TIMESTAMP 
+            WHERE id = ?
+        ''', (session_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.debug(f"Messaggio aggiunto alla sessione {session_id}: {role}")
+    
+    def list_chat_sessions(self, limit: int = 50):
+        """Ottiene la lista delle sessioni di chat, ordinate per data di aggiornamento decrescente"""
+        conn = self.get_connection()
+        
+        query = '''
+            SELECT 
+                id,
+                title,
+                created_at,
+                updated_at,
+                (SELECT COUNT(*) FROM chat_messages WHERE session_id = chat_sessions.id) as message_count
+            FROM chat_sessions
+            ORDER BY updated_at DESC
+            LIMIT ?
+        '''
+        
+        df = pd.read_sql_query(query, conn, params=(limit,))
+        conn.close()
+        
+        return df
+    
+    def get_chat_history(self, session_id: int):
+        """Ottiene la cronologia completa di una sessione di chat"""
+        conn = self.get_connection()
+        
+        query = '''
+            SELECT role, content, created_at
+            FROM chat_messages
+            WHERE session_id = ?
+            ORDER BY id ASC
+        '''
+        
+        df = pd.read_sql_query(query, conn, params=(session_id,))
+        conn.close()
+        
+        return df
+    
+    def get_chat_session_info(self, session_id: int):
+        """Ottiene le informazioni di una sessione di chat"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, title, created_at, updated_at
+            FROM chat_sessions
+            WHERE id = ?
+        ''', (session_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                'id': row[0],
+                'title': row[1],
+                'created_at': row[2],
+                'updated_at': row[3]
+            }
+        return None
+    
+    def update_chat_session_title(self, session_id: int, title: str) -> None:
+        """Aggiorna il titolo di una sessione di chat"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE chat_sessions
+            SET title = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (title, session_id))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Titolo sessione {session_id} aggiornato: {title}")
+    
+    def delete_chat_session(self, session_id: int) -> bool:
+        """Elimina una sessione di chat e tutti i suoi messaggi (CASCADE)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Conta messaggi che verranno eliminati
+        cursor.execute('SELECT COUNT(*) FROM chat_messages WHERE session_id = ?', (session_id,))
+        row = cursor.fetchone()
+        message_count = int(row[0]) if row else 0
+        
+        cursor.execute('DELETE FROM chat_sessions WHERE id = ?', (session_id,))
+        
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        
+        if deleted:
+            logger.info(f"Sessione chat {session_id} eliminata ({message_count} messaggi)")
+        
+        return deleted

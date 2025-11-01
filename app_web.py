@@ -219,6 +219,11 @@ if st.sidebar.button("📊 Classifiche con Parametri", use_container_width=True)
 if st.sidebar.button("🎯 Giocata Proposta", use_container_width=True):
     st.session_state.page = "🎯 Giocata Proposta"
 
+# Solo Admin può vedere Chat (non visibile per guest su WEB/MOBILE)
+if user_role == "admin":
+    if st.sidebar.button("💬 Chat", use_container_width=True):
+        st.session_state.page = "💬 Chat"
+
 # Solo Admin può vedere Import PDF
 if user_role == "admin":
     if st.sidebar.button("📄 Import PDF", use_container_width=True):
@@ -244,9 +249,12 @@ if 'page' not in st.session_state:
 
 page = st.session_state.page
 
-# Mostra la pagina corrente
+# Mostra la pagina corrente (non mostrare Chat per guest)
 st.sidebar.markdown("---")
-st.sidebar.markdown(f"**Pagina Corrente:** {page}")
+display_page = page
+if page == "💬 Chat" and user_role != "admin":
+    display_page = "📊 Dashboard"
+st.sidebar.markdown(f"**Pagina Corrente:** {display_page}")
 
 # Funzione per mostrare le classifiche senza PyArrow
 def show_standings_simple(standings_df, title, show_achievements=False, current_season=None, matches_df_for_form=None, standings_type_for_form="total", venue_for_form="TOTALE", form_insert_after=None, form_insert_before=None, show_title=True, show_summary_metrics=True):
@@ -350,7 +358,7 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
                 if team_matches.empty:
                     return ''
                 team_matches = team_matches.sort_values('date_parsed', ascending=False).head(5)
-                symbols = []
+                symbols_data = []
                 for _, m in team_matches.iterrows():
                     team_home = (m['home_team'] == team_name)
                     # Determina l'esito V/N/P per la squadra in base al tipo classifica
@@ -379,14 +387,24 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
                         else:
                             team_won = (h2 > a2 and team_home) or (a2 > h2 and not team_home)
                             outcome = 'V' if team_won else 'P'
-                    symbols.append(outcome)
+                    
+                    # Prepara info partita
+                    home_team = str(m.get('home_team', ''))
+                    away_team = str(m.get('away_team', ''))
+                    home_goals = str(int(m.get('ft_home_goals', 0) or 0))
+                    away_goals = str(int(m.get('ft_away_goals', 0) or 0))
+                    match_date = str(m.get('date', ''))
+                    match_info = f"{home_team} {home_goals}-{away_goals} {away_team}\nData: {match_date}"
+                    symbols_data.append((outcome, match_info))
 
                 # Render come badge colorati (compatibili HTML su Streamlit/Render) - orizzontali come prima
-                def badge(s):
+                def badge(s, info):
                     color = '#28a745' if s == 'V' else ('#f0ad4e' if s == 'N' else ('#dc3545' if s == 'P' else '#6c757d'))
-                    return f"<span style='display:inline-block;background:{color};color:white;border-radius:6px;padding:2px 6px;margin-right:4px;font-weight:600;'>" + s + "</span>"
+                    # Escape quote per JavaScript
+                    info_escaped = info.replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n')
+                    return f"<span onclick=\"alert('{info_escaped}')\" style='display:inline-block;background:{color};color:white;border-radius:0;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;cursor:pointer;' title='{info_escaped.replace('\\n', ' - ')}'>" + s + "</span>"
 
-                return ''.join([badge(s) for s in symbols])
+                return ''.join([badge(s, info) for s, info in symbols_data])
 
             # Mappa squadra -> forma (supporta 'team' o 'Squadra')
             team_col = 'team' if 'team' in standings_df.columns else ('Squadra' if 'Squadra' in standings_df.columns else None)
@@ -1110,22 +1128,34 @@ elif page == "📊 Classifiche con Parametri":
                                 if tm.empty:
                                     return ''
                                 tm = tm.sort_values('date_parsed', ascending=False).head(5)
-                                symbols = []
+                                symbols_data = []
                                 for _, m in tm.iterrows():
                                     team_home = (m['home_team'] == team_name)
                                     base_res = str(m.get('ft_result', '')).upper()
                                     if base_res == 'D':
-                                        symbols.append('N')
+                                        outcome = 'N'
                                     elif base_res == 'H':
-                                        symbols.append('V' if team_home else 'P')
+                                        outcome = 'V' if team_home else 'P'
                                     elif base_res == 'A':
-                                        symbols.append('V' if not team_home else 'P')
+                                        outcome = 'V' if not team_home else 'P'
                                     else:
-                                        symbols.append('?')
-                                def badge(s):
+                                        outcome = '?'
+                                    
+                                    # Prepara info partita
+                                    home_team = str(m.get('home_team', ''))
+                                    away_team = str(m.get('away_team', ''))
+                                    home_goals = str(int(m.get('ft_home_goals', 0) or 0))
+                                    away_goals = str(int(m.get('ft_away_goals', 0) or 0))
+                                    match_date = str(m.get('date', ''))
+                                    match_info = f"{home_team} {home_goals}-{away_goals} {away_team}\nData: {match_date}"
+                                    symbols_data.append((outcome, match_info))
+                                    
+                                def badge(s, info):
                                     color = '#28a745' if s == 'V' else ('#f0ad4e' if s == 'N' else ('#dc3545' if s == 'P' else '#6c757d'))
-                                    return f"<span style='display:inline-block;background:{color};color:white;border-radius:6px;padding:2px 6px;margin-right:4px;font-weight:600;'>" + s + "</span>"
-                                return ''.join(badge(s) for s in symbols)
+                                    # Escape quote per JavaScript
+                                    info_escaped = info.replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n')
+                                    return f"<span onclick=\"alert('{info_escaped}')\" style='display:inline-block;background:{color};color:white;border-radius:0;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;cursor:pointer;' title='{info_escaped.replace('\\n', ' - ')}'>" + s + "</span>"
+                                return ''.join(badge(s, info) for s, info in symbols_data)
 
                             display_df = standings_df.copy()
                             # Aggiungi Forma usando colonna team
@@ -1700,9 +1730,9 @@ elif page == "🏆 Best Teams":
                     # Aggiungi colonna "ULTIME 5" per Under/Over
                     def badge_uo(s):
                         if s == 'O':
-                            return f"<span style='display:inline-block;background:#28a745;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;'>+</span>"
+                            return f"<span style='display:inline-block;background:#28a745;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;'>+</span>"
                         else:  # U
-                            return f"<span style='display:inline-block;background:#dc3545;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;'>-</span>"
+                            return f"<span style='display:inline-block;background:#dc3545;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;'>-</span>"
                     
                     def compute_last5_uo_totale(row):
                         team_name = row['Squadra']
@@ -1853,6 +1883,157 @@ elif page == "📋 Log Accessi":
         with top2:
             st.metric("Visualizzazioni Totali", total_views_cum)
         st.info("Nessun accesso registrato ancora.")
+
+elif page == "💬 Chat":
+    # Solo Admin può accedere alla pagina Chat (non visibile per guest su WEB/MOBILE)
+    if user_role != "admin":
+        st.error("❌ Accesso negato: Questa pagina è riservata agli amministratori.")
+        st.session_state.page = "📊 Dashboard"
+        st.rerun()
+    
+    st.title("💬 Chat - Cronologia Conversazioni")
+    
+    # Inizializza session_state per gestire la sessione chat corrente
+    if 'current_chat_session_id' not in st.session_state:
+        st.session_state.current_chat_session_id = None
+    
+    if 'chat_sessions_refresh' not in st.session_state:
+        st.session_state.chat_sessions_refresh = 0
+    
+    # Sidebar per gestire le sessioni chat
+    with st.sidebar.expander("📋 Gestione Chat", expanded=True):
+        # Bottone per nuova chat
+        if st.button("➕ Nuova Chat", use_container_width=True):
+            session_id = db.create_chat_session()
+            st.session_state.current_chat_session_id = session_id
+            st.session_state.chat_sessions_refresh += 1
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # Lista delle chat esistenti
+        st.markdown("### Chat Esistenti")
+        sessions = db.list_chat_sessions(limit=50)
+        
+        if not sessions.empty:
+            for _, session in sessions.iterrows():
+                session_id = int(session['id'])
+                title = session['title'] if session['title'] else f"Chat {session_id}"
+                message_count = session['message_count']
+                updated_at = session['updated_at']
+                
+                # Formatta la data
+                try:
+                    dt = datetime.strptime(updated_at, '%Y-%m-%d %H:%M:%S')
+                    date_str = dt.strftime('%d/%m/%Y %H:%M')
+                except:
+                    date_str = updated_at
+                
+                # Pulsante per selezionare la chat
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    if st.button(f"📝 {title}", key=f"select_{session_id}", use_container_width=True):
+                        st.session_state.current_chat_session_id = session_id
+                        st.rerun()
+                
+                with col2:
+                    if st.button("🗑️", key=f"delete_{session_id}", help="Elimina chat"):
+                        db.delete_chat_session(session_id)
+                        if st.session_state.current_chat_session_id == session_id:
+                            st.session_state.current_chat_session_id = None
+                        st.session_state.chat_sessions_refresh += 1
+                        st.rerun()
+                
+                st.caption(f"{message_count} messaggi • {date_str}")
+        else:
+            st.info("Nessuna chat salvata. Crea una nuova chat per iniziare.")
+    
+    # Area principale: visualizza chat selezionata
+    if st.session_state.current_chat_session_id:
+        session_id = st.session_state.current_chat_session_id
+        session_info = db.get_chat_session_info(session_id)
+        
+        if session_info:
+            # Mostra info sessione
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.subheader(f"📝 {session_info['title']}")
+            with col2:
+                if st.button("✏️ Modifica Titolo", key="edit_title"):
+                    st.session_state.editing_title = True
+            
+            if st.session_state.get('editing_title', False):
+                new_title = st.text_input("Nuovo titolo:", value=session_info['title'], key="new_title_input")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Salva", key="save_title"):
+                        if new_title and new_title.strip():
+                            db.update_chat_session_title(session_id, new_title.strip())
+                            st.session_state.editing_title = False
+                            st.rerun()
+                with col2:
+                    if st.button("❌ Annulla", key="cancel_title"):
+                        st.session_state.editing_title = False
+                        st.rerun()
+            
+            st.caption(f"Creata il: {session_info['created_at']} • Ultimo aggiornamento: {session_info['updated_at']}")
+            st.markdown("---")
+            
+            # Visualizza cronologia messaggi
+            history = db.get_chat_history(session_id)
+            
+            if not history.empty:
+                st.markdown("### 📜 Cronologia Chat")
+                
+                # Mostra i messaggi esistenti
+                for _, msg in history.iterrows():
+                    role = msg['role']
+                    content = msg['content']
+                    
+                    with st.chat_message(role):
+                        st.write(content)
+                        st.caption(f"🕐 {msg['created_at']}")
+                
+                st.markdown("---")
+            else:
+                st.info("Questa chat è vuota. Inizia a scrivere per aggiungere messaggi!")
+            
+            # Input per nuovo messaggio
+            prompt = st.chat_input("Scrivi un messaggio...")
+            
+            if prompt:
+                # Salva messaggio utente
+                db.add_chat_message(session_id, "user", prompt)
+                
+                # Per ora, aggiungi una risposta automatica semplice
+                # In futuro, puoi integrare con un modello AI o logica personalizzata
+                response = f"Risposta automatica al messaggio: '{prompt}'"
+                db.add_chat_message(session_id, "assistant", response)
+                
+                st.rerun()
+        else:
+            st.error("Sessione chat non trovata. Seleziona una chat dalla sidebar.")
+            st.session_state.current_chat_session_id = None
+    else:
+        # Nessuna chat selezionata
+        st.info("👈 Seleziona una chat dalla sidebar o creane una nuova per iniziare!")
+        
+        # Mostra statistiche generali
+        all_sessions = db.list_chat_sessions(limit=1000)
+        if not all_sessions.empty:
+            st.markdown("### 📊 Statistiche")
+            col1, col2, col3 = st.columns(3)
+            
+            total_sessions = len(all_sessions)
+            total_messages = all_sessions['message_count'].sum()
+            
+            with col1:
+                st.metric("Chat Totali", total_sessions)
+            with col2:
+                st.metric("Messaggi Totali", int(total_messages))
+            with col3:
+                avg_messages = int(total_messages / total_sessions) if total_sessions > 0 else 0
+                st.metric("Media Messaggi/Chat", avg_messages)
 
 # Footer
 st.sidebar.markdown("---")

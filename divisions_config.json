@@ -1,7 +1,7 @@
 {
   "Copa De La Liga Profesional": {
-    "exclude_top": 0,
-    "exclude_bottom": 0
+    "exclude_top": 2,
+    "exclude_bottom": 2
   },
   "Torneo De La Liga Profesional": {
     "exclude_top": 0,
@@ -12,7 +12,7 @@
     "exclude_bottom": 0
   },
   "B1": {
-    "exclude_top": 2,
+    "exclude_top": 0,
     "exclude_bottom": 0
   },
   "Serie A": {
@@ -68,8 +68,8 @@
     "exclude_bottom": 0
   },
   "I1": {
-    "exclude_top": 0,
-    "exclude_bottom": 0
+    "exclude_top": 3,
+    "exclude_bottom": 2
   },
   "I2": {
     "exclude_top": 0,

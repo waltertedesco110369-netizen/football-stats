@@ -219,6 +219,9 @@ if st.sidebar.button("📊 Classifiche con Parametri", use_container_width=True)
 if st.sidebar.button("🎯 Giocata Proposta", use_container_width=True):
     st.session_state.page = "🎯 Giocata Proposta"
 
+if st.sidebar.button("💬 Chat", use_container_width=True):
+    st.session_state.page = "💬 Chat"
+
 # Solo Admin può vedere Import PDF
 if user_role == "admin":
     if st.sidebar.button("📄 Import PDF", use_container_width=True):
@@ -350,7 +353,7 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
                 if team_matches.empty:
                     return ''
                 team_matches = team_matches.sort_values('date_parsed', ascending=False).head(5)
-                symbols = []
+                symbols_data = []
                 for _, m in team_matches.iterrows():
                     team_home = (m['home_team'] == team_name)
                     # Determina l'esito V/N/P per la squadra in base al tipo classifica
@@ -379,14 +382,24 @@ def show_standings_simple(standings_df, title, show_achievements=False, current_
                         else:
                             team_won = (h2 > a2 and team_home) or (a2 > h2 and not team_home)
                             outcome = 'V' if team_won else 'P'
-                    symbols.append(outcome)
+                    
+                    # Prepara info partita
+                    home_team = str(m.get('home_team', ''))
+                    away_team = str(m.get('away_team', ''))
+                    home_goals = str(int(m.get('ft_home_goals', 0) or 0))
+                    away_goals = str(int(m.get('ft_away_goals', 0) or 0))
+                    match_date = str(m.get('date', ''))
+                    match_info = f"{home_team} {home_goals}-{away_goals} {away_team}\nData: {match_date}"
+                    symbols_data.append((outcome, match_info))
 
                 # Render come badge colorati (compatibili HTML su Streamlit/Render) - orizzontali come prima
-                def badge(s):
+                def badge(s, info):
                     color = '#28a745' if s == 'V' else ('#f0ad4e' if s == 'N' else ('#dc3545' if s == 'P' else '#6c757d'))
-                    return f"<span style='display:inline-block;background:{color};color:white;border-radius:6px;padding:2px 6px;margin-right:4px;font-weight:600;'>" + s + "</span>"
+                    # Escape quote per JavaScript
+                    info_escaped = info.replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n')
+                    return f"<span onclick=\"alert('{info_escaped}')\" style='display:inline-block;background:{color};color:white;border-radius:0;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;cursor:pointer;' title='{info_escaped.replace('\\n', ' - ')}'>" + s + "</span>"
 
-                return ''.join([badge(s) for s in symbols])
+                return ''.join([badge(s, info) for s, info in symbols_data])
 
             # Mappa squadra -> forma (supporta 'team' o 'Squadra')
             team_col = 'team' if 'team' in standings_df.columns else ('Squadra' if 'Squadra' in standings_df.columns else None)
@@ -561,27 +574,14 @@ elif page == "📁 Gestione Dati":
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             
-            # Opzioni di import
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                season_option = st.selectbox(
-                    "Stagione",
-                    ["Auto (rileva dal file)", "2020-2021", "2021-2022", "2022-2023", "2023-2024", "2024-2025", "2025-2026"],
-                    help="Per file multi-stagione scegli 'Auto': la stagione viene letta dai dati"
-                )
-            
-            with col2:
-                file_type = st.selectbox(
-                    "Tipo File",
-                    ["main", "new_leagues", "future_matches"],
-                    help="Tipo di file per gestire diversamente i dati"
-                )
+            # La stagione viene sempre rilevata automaticamente dal file
+            st.info("ℹ️ La stagione viene rilevata automaticamente dal file.")
             
             if st.button("Importa File", type="primary"):
                 with st.spinner("Importazione in corso..."):
-                    season_param = None if season_option.startswith("Auto") else season_option
-                    success = db.import_excel_file(temp_path, season_param, file_type)
+                    # Passa sempre None per stagione (rilevamento automatico)
+                    # Il parametro file_type non viene utilizzato, viene passato "main" come default
+                    success = db.import_excel_file(temp_path, None, "main")
                     if success:
                         st.success("File importato con successo!")
                         st.rerun()
@@ -646,19 +646,6 @@ elif page == "📁 Gestione Dati":
                     st.rerun()
                 except Exception as e:
                     st.error(f"Errore nella normalizzazione: {e}")
-        
-        seasons = db.get_available_seasons()
-        if seasons:
-            season_to_delete = st.selectbox(
-                "Seleziona stagione da eliminare",
-                ["Nessuna"] + seasons
-            )
-            
-            if season_to_delete != "Nessuna":
-                if st.button("Elimina Stagione", type="secondary"):
-                    deleted_count = db.cleanup_old_season(season_to_delete)
-                    st.success(f"Eliminati {deleted_count} record della stagione {season_to_delete}")
-                    st.rerun()
 
 # Pagina Classifiche
 elif page == "🏆 Classifiche":
@@ -709,6 +696,79 @@ elif page == "🏆 Classifiche":
     with col4:
         st.write("")  # Spazio vuoto
     
+    # Configurazione campionati con regole speciali (play-off, retrocessione, etc.)
+    # Questi campionati hanno una struttura a fasi multiple
+    SPECIAL_LEAGUES = {
+        'Bundesliga': {
+            'base_matches': 22,
+            'has_playoffs_championship': True,
+            'has_relegation_group': True,
+            'has_conference_playoff': True
+        }
+    }
+    
+    # Inizializza session_state per la fase selezionata
+    if 'selected_competition_phase' not in st.session_state:
+        st.session_state.selected_competition_phase = None
+    
+    # Verifica se il campionato selezionato ha regole speciali
+    current_league = selected_division if selected_division else None
+    is_special_league = False
+    league_config = None
+    
+    if current_league and current_league in SPECIAL_LEAGUES:
+        is_special_league = True
+        league_config = SPECIAL_LEAGUES[current_league]
+    elif current_league:
+        # Controlla anche se il nome contiene "Bundesliga" (potrebbe essere formattato diversamente)
+        for special_league in SPECIAL_LEAGUES.keys():
+            if special_league.lower() in current_league.lower():
+                is_special_league = True
+                league_config = SPECIAL_LEAGUES[special_league]
+                break
+    
+    # Mostra i tasti per fasi speciali solo se il campionato le supporta
+    if is_special_league and league_config:
+        st.markdown("---")
+        st.markdown("### Fasi Competizione")
+        
+        # Crea i tasti per le fasi speciali (tutti in una riga, Campionato Base come prima opzione)
+        phase_col1, phase_col2, phase_col3, phase_col4 = st.columns(4)
+        
+        with phase_col1:
+            if st.button("🏠 Campionato Base (22 partite)", use_container_width=True,
+                        type="primary" if st.session_state.selected_competition_phase is None else "secondary",
+                        key="btn_base_competition"):
+                st.session_state.selected_competition_phase = None
+                st.rerun()
+        
+        with phase_col2:
+            if st.button("📊 Play-Offs Championship", use_container_width=True, 
+                        type="primary" if st.session_state.selected_competition_phase == "playoffs_championship" else "secondary",
+                        key="btn_playoffs_championship"):
+                st.session_state.selected_competition_phase = "playoffs_championship"
+                st.rerun()
+        
+        with phase_col3:
+            if st.button("📉 Gruppo Retrocessione", use_container_width=True,
+                        type="primary" if st.session_state.selected_competition_phase == "relegation_group" else "secondary",
+                        key="btn_relegation_group"):
+                st.session_state.selected_competition_phase = "relegation_group"
+                st.rerun()
+        
+        with phase_col4:
+            if st.button("🏆 Conference - Play Offs", use_container_width=True,
+                        type="primary" if st.session_state.selected_competition_phase == "conference_playoff" else "secondary",
+                        key="btn_conference_playoff"):
+                st.session_state.selected_competition_phase = "conference_playoff"
+                st.rerun()
+        
+        st.markdown("---")
+    else:
+        # Se il campionato non ha regole speciali, reset della fase selezionata
+        if st.session_state.selected_competition_phase:
+            st.session_state.selected_competition_phase = None
+    
     # Carica i dati
     if selected_seasons and selected_divisions:
         matches_df = db.get_matches_data(selected_seasons, selected_divisions)
@@ -717,42 +777,187 @@ elif page == "🏆 Classifiche":
             # Determina la stagione corrente per i traguardi
             current_season_for_achievements = selected_seasons[-1] if selected_seasons else None
             
+            # Inizializza phase_title per i campionati normali
+            phase_title = "Classifica Totale"
+            
+            # Se il campionato ha regole speciali, filtra le partite in base alla fase selezionata
+            if is_special_league and league_config:
+                selected_phase = st.session_state.get('selected_competition_phase', None)
+                
+                if selected_phase:
+                    # Converti date per ordinare le partite
+                    matches_df['date_parsed'] = pd.to_datetime(matches_df['date'], errors='coerce')
+                    matches_df = matches_df.sort_values('date_parsed')
+                    
+                    # Per ogni squadra, identifica le prime 22 partite (campionato base)
+                    base_matches = 22
+                    teams_base_matches = {}
+                    all_teams = set(matches_df['home_team'].unique()) | set(matches_df['away_team'].unique())
+                    
+                    for team in all_teams:
+                        # Partite dove la squadra ha giocato (casa o trasferta)
+                        team_matches = matches_df[
+                            (matches_df['home_team'] == team) | (matches_df['away_team'] == team)
+                        ].copy()
+                        team_matches = team_matches.sort_values('date_parsed')
+                        
+                        # Prime 22 partite
+                        first_22 = team_matches.head(base_matches)
+                        teams_base_matches[team] = set(first_22.index)
+                    
+                    # Tutte le partite base (prime 22 per ogni squadra)
+                    base_match_indices = set()
+                    for indices in teams_base_matches.values():
+                        base_match_indices.update(indices)
+                    
+                    # Calcola classifica base per determinare prime 6 e ultime 6
+                    base_matches_df = matches_df[matches_df.index.isin(base_match_indices)].copy()
+                    base_standings = calculator.calculate_standings(base_matches_df, "total")
+                    
+                    if not base_standings.empty:
+                        base_standings = base_standings.sort_values(['PT', 'DF'], ascending=[False, False])
+                        top_6_teams = set(base_standings.head(6)['team'].values)
+                        bottom_6_teams = set(base_standings.tail(6)['team'].values)
+                        
+                        # Filtra le partite in base alla fase selezionata
+                        if selected_phase == "playoffs_championship":
+                            # Partite dopo le 22 base dove entrambe le squadre sono tra le prime 6
+                            filtered_matches = matches_df[
+                                (~matches_df.index.isin(base_match_indices)) &
+                                (matches_df['home_team'].isin(top_6_teams)) &
+                                (matches_df['away_team'].isin(top_6_teams))
+                            ].copy()
+                            phase_title = "Play-Offs Championship"
+                            
+                        elif selected_phase == "relegation_group":
+                            # Partite dopo le 22 base dove entrambe le squadre sono tra le ultime 6
+                            filtered_matches = matches_df[
+                                (~matches_df.index.isin(base_match_indices)) &
+                                (matches_df['home_team'].isin(bottom_6_teams)) &
+                                (matches_df['away_team'].isin(bottom_6_teams))
+                            ].copy()
+                            phase_title = "Gruppo Retrocessione"
+                            
+                        elif selected_phase == "conference_playoff":
+                            # Calcola classifiche dei mini-campionati per trovare le squadre qualificate
+                            playoffs_matches = matches_df[
+                                (~matches_df.index.isin(base_match_indices)) &
+                                (matches_df['home_team'].isin(top_6_teams)) &
+                                (matches_df['away_team'].isin(top_6_teams))
+                            ].copy()
+                            
+                            relegation_matches = matches_df[
+                                (~matches_df.index.isin(base_match_indices)) &
+                                (matches_df['home_team'].isin(bottom_6_teams)) &
+                                (matches_df['away_team'].isin(bottom_6_teams))
+                            ].copy()
+                            
+                            # Calcola classifiche dei mini-campionati (solo partite dei mini-campionati)
+                            if not playoffs_matches.empty:
+                                playoffs_standings = calculator.calculate_standings(playoffs_matches, "total")
+                                playoffs_standings = playoffs_standings.sort_values(['PT', 'DF'], ascending=[False, False])
+                                if len(playoffs_standings) >= 5:
+                                    qualified_5th_playoffs = playoffs_standings.iloc[4]['team']
+                                else:
+                                    qualified_5th_playoffs = None
+                            else:
+                                qualified_5th_playoffs = None
+                            
+                            if not relegation_matches.empty:
+                                relegation_standings = calculator.calculate_standings(relegation_matches, "total")
+                                relegation_standings = relegation_standings.sort_values(['PT', 'DF'], ascending=[False, False])
+                                if len(relegation_standings) >= 2:
+                                    qualified_1st_relegation = relegation_standings.iloc[0]['team']
+                                    qualified_2nd_relegation = relegation_standings.iloc[1]['team']
+                                else:
+                                    qualified_1st_relegation = None
+                                    qualified_2nd_relegation = None
+                            else:
+                                qualified_1st_relegation = None
+                                qualified_2nd_relegation = None
+                            
+                            # Partite Conference League Play Off: tra le squadre qualificate
+                            qualified_teams = set()
+                            if qualified_5th_playoffs:
+                                qualified_teams.add(qualified_5th_playoffs)
+                            if qualified_1st_relegation:
+                                qualified_teams.add(qualified_1st_relegation)
+                            if qualified_2nd_relegation:
+                                qualified_teams.add(qualified_2nd_relegation)
+                            
+                            filtered_matches = matches_df[
+                                (~matches_df.index.isin(base_match_indices)) &
+                                (
+                                    (matches_df['home_team'].isin(qualified_teams) & matches_df['away_team'].isin(qualified_teams))
+                                )
+                            ].copy()
+                            phase_title = "Conference League - Play Offs"
+                        else:
+                            filtered_matches = matches_df.copy()
+                            phase_title = "Classifica Totale"
+                    else:
+                        filtered_matches = matches_df.copy()
+                        phase_title = "Classifica Totale"
+                else:
+                    # Campionato Base: solo prime 22 partite per squadra
+                    matches_df['date_parsed'] = pd.to_datetime(matches_df['date'], errors='coerce')
+                    matches_df = matches_df.sort_values('date_parsed')
+                    
+                    all_teams = set(matches_df['home_team'].unique()) | set(matches_df['away_team'].unique())
+                    base_match_indices = set()
+                    
+                    for team in all_teams:
+                        team_matches = matches_df[
+                            (matches_df['home_team'] == team) | (matches_df['away_team'] == team)
+                        ].copy()
+                        team_matches = team_matches.sort_values('date_parsed')
+                        first_22 = team_matches.head(22)
+                        base_match_indices.update(first_22.index)
+                    
+                    filtered_matches = matches_df[matches_df.index.isin(base_match_indices)].copy()
+                    phase_title = "Campionato Base (22 partite)"
+            else:
+                filtered_matches = matches_df.copy()
+            
+            # Usa filtered_matches invece di matches_df per i calcoli
+            matches_df_to_use = filtered_matches
+            
             # Gestisce i diversi tipi di classifiche
             if standings_type == "Totale":
-                standings_df = calculator.calculate_standings(matches_df, "total")
-                show_standings_simple(standings_df, "Classifica Totale", show_achievements=True, current_season=current_season_for_achievements, matches_df_for_form=matches_df, standings_type_for_form="total", venue_for_form="TOTALE")
+                standings_df = calculator.calculate_standings(matches_df_to_use, "total")
+                show_standings_simple(standings_df, phase_title, show_achievements=True, current_season=current_season_for_achievements, matches_df_for_form=matches_df_to_use, standings_type_for_form="total", venue_for_form="TOTALE")
             
             elif standings_type == "I Tempo":
-                standings_df = calculator.calculate_standings(matches_df, "first_half")
-                show_standings_simple(standings_df, "Classifica I Tempo", matches_df_for_form=matches_df, standings_type_for_form="first_half", venue_for_form="TOTALE")
+                standings_df = calculator.calculate_standings(matches_df_to_use, "first_half")
+                show_standings_simple(standings_df, "Classifica I Tempo", matches_df_for_form=matches_df_to_use, standings_type_for_form="first_half", venue_for_form="TOTALE")
             
             elif standings_type == "II Tempo":
-                standings_df = calculator.calculate_standings(matches_df, "second_half")
-                show_standings_simple(standings_df, "Classifica II Tempo", matches_df_for_form=matches_df, standings_type_for_form="second_half", venue_for_form="TOTALE")
+                standings_df = calculator.calculate_standings(matches_df_to_use, "second_half")
+                show_standings_simple(standings_df, "Classifica II Tempo", matches_df_for_form=matches_df_to_use, standings_type_for_form="second_half", venue_for_form="TOTALE")
             
             elif standings_type == "Casa":
-                standings_df = calculator.calculate_standings(matches_df, "total", venue_filter="CASA")
-                show_standings_simple(standings_df, "Classifica Casa", show_achievements=True, current_season=current_season_for_achievements, matches_df_for_form=matches_df, standings_type_for_form="total", venue_for_form="CASA")
+                standings_df = calculator.calculate_standings(matches_df_to_use, "total", venue_filter="CASA")
+                show_standings_simple(standings_df, "Classifica Casa", show_achievements=True, current_season=current_season_for_achievements, matches_df_for_form=matches_df_to_use, standings_type_for_form="total", venue_for_form="CASA")
             
             elif standings_type == "Fuori":
-                standings_df = calculator.calculate_standings(matches_df, "total", venue_filter="FUORI")
-                show_standings_simple(standings_df, "Classifica Fuori", show_achievements=True, current_season=current_season_for_achievements, matches_df_for_form=matches_df, standings_type_for_form="total", venue_for_form="FUORI")
+                standings_df = calculator.calculate_standings(matches_df_to_use, "total", venue_filter="FUORI")
+                show_standings_simple(standings_df, "Classifica Fuori", show_achievements=True, current_season=current_season_for_achievements, matches_df_for_form=matches_df_to_use, standings_type_for_form="total", venue_for_form="FUORI")
             
             elif standings_type == "Casa I Tempo":
-                standings_df = calculator.calculate_standings(matches_df, "first_half", venue_filter="CASA")
-                show_standings_simple(standings_df, "Classifica Casa I Tempo", matches_df_for_form=matches_df, standings_type_for_form="first_half", venue_for_form="CASA")
+                standings_df = calculator.calculate_standings(matches_df_to_use, "first_half", venue_filter="CASA")
+                show_standings_simple(standings_df, "Classifica Casa I Tempo", matches_df_for_form=matches_df_to_use, standings_type_for_form="first_half", venue_for_form="CASA")
             
             elif standings_type == "Fuori I Tempo":
-                standings_df = calculator.calculate_standings(matches_df, "first_half", venue_filter="FUORI")
-                show_standings_simple(standings_df, "Classifica Fuori I Tempo", matches_df_for_form=matches_df, standings_type_for_form="first_half", venue_for_form="FUORI")
+                standings_df = calculator.calculate_standings(matches_df_to_use, "first_half", venue_filter="FUORI")
+                show_standings_simple(standings_df, "Classifica Fuori I Tempo", matches_df_for_form=matches_df_to_use, standings_type_for_form="first_half", venue_for_form="FUORI")
             
             elif standings_type == "Casa II Tempo":
-                standings_df = calculator.calculate_standings(matches_df, "second_half", venue_filter="CASA")
-                show_standings_simple(standings_df, "Classifica Casa II Tempo", matches_df_for_form=matches_df, standings_type_for_form="second_half", venue_for_form="CASA")
+                standings_df = calculator.calculate_standings(matches_df_to_use, "second_half", venue_filter="CASA")
+                show_standings_simple(standings_df, "Classifica Casa II Tempo", matches_df_for_form=matches_df_to_use, standings_type_for_form="second_half", venue_for_form="CASA")
             
             elif standings_type == "Fuori II Tempo":
-                standings_df = calculator.calculate_standings(matches_df, "second_half", venue_filter="FUORI")
-                show_standings_simple(standings_df, "Classifica Fuori II Tempo", matches_df_for_form=matches_df, standings_type_for_form="second_half", venue_for_form="FUORI")
+                standings_df = calculator.calculate_standings(matches_df_to_use, "second_half", venue_filter="FUORI")
+                show_standings_simple(standings_df, "Classifica Fuori II Tempo", matches_df_for_form=matches_df_to_use, standings_type_for_form="second_half", venue_for_form="FUORI")
             
             elif standings_type == "Con Parametri":
                 col1, col2 = st.columns(2)
@@ -772,14 +977,14 @@ elif page == "🏆 Classifiche":
                     )
                 
                 standings_df = calculator.calculate_standings(
-                    matches_df, "total", exclude_top, exclude_bottom
+                    matches_df_to_use, "total", exclude_top, exclude_bottom
                 )
                 show_standings_simple(
                     standings_df,
                     "Classifica con Parametri",
                     show_achievements=True,
                     current_season=current_season_for_achievements,
-                    matches_df_for_form=matches_df,
+                    matches_df_for_form=matches_df_to_use,
                     standings_type_for_form="total",
                     venue_for_form="TOTALE",
                     form_insert_after="P%",
@@ -789,6 +994,104 @@ elif page == "🏆 Classifiche":
             st.warning("Nessun dato trovato per i filtri selezionati.")
     else:
         st.info("Seleziona almeno una stagione e un campionato per visualizzare le classifiche.")
+    
+    # Verifica dati per Austria Bundesliga 2022-2023
+    if (selected_seasons and '2022-2023' in selected_seasons and 
+        selected_divisions and 'Bundesliga' in selected_divisions and 
+        standings_type == "Totale"):
+        
+        st.markdown("---")
+        st.markdown("### 🔍 Verifica Dati - Confronto con Screenshot")
+        
+        # Dati di riferimento dallo screenshot
+        screenshot_data = {
+            'Salzburg': {'PG': 22, 'V': 17, 'N': 4, 'P': 1, 'PT': 55},
+            'Sturm Graz': {'PG': 22, 'V': 14, 'N': 6, 'P': 2, 'PT': 48},
+            'LASK': {'PG': 22, 'V': 10, 'N': 8, 'P': 4, 'PT': 38},
+            'SK Rapid': {'PG': 22, 'V': 10, 'N': 3, 'P': 9, 'PT': 33},
+            'Austria Vienna': {'PG': 22, 'V': 10, 'N': 5, 'P': 7, 'PT': 32},
+            'A. Klagenfurt': {'PG': 22, 'V': 9, 'N': 3, 'P': 10, 'PT': 30},
+            'Tirol': {'PG': 22, 'V': 8, 'N': 4, 'P': 10, 'PT': 28},
+            'A. Lustenau': {'PG': 22, 'V': 7, 'N': 6, 'P': 9, 'PT': 27},
+            'Wolfsberger': {'PG': 22, 'V': 6, 'N': 3, 'P': 13, 'PT': 21},
+            'Hartberg': {'PG': 22, 'V': 5, 'N': 3, 'P': 14, 'PT': 18},
+            'Ried': {'PG': 22, 'V': 4, 'N': 6, 'P': 12, 'PT': 18},
+            'Altach': {'PG': 22, 'V': 4, 'N': 5, 'P': 13, 'PT': 17}
+        }
+        
+        if not matches_df.empty:
+            # Calcola la classifica dal database
+            db_standings = calculator.calculate_standings(matches_df, "total")
+            
+            if not db_standings.empty:
+                # Crea tabella di confronto
+                comparison_data = []
+                
+                for team_screenshot, stats_screenshot in screenshot_data.items():
+                    # Cerca la squadra nel database (potrebbe avere nome leggermente diverso)
+                    team_match = None
+                    for db_team in db_standings['team'].values:
+                        # Confronto flessibile dei nomi
+                        if (team_screenshot.lower() in db_team.lower() or 
+                            db_team.lower() in team_screenshot.lower() or
+                            team_screenshot.lower().replace('.', '').replace(' ', '') == db_team.lower().replace('.', '').replace(' ', '')):
+                            team_match = db_team
+                            break
+                    
+                    if team_match:
+                        db_row = db_standings[db_standings['team'] == team_match].iloc[0]
+                        db_stats = {
+                            'PG': int(db_row['PG']),
+                            'V': int(db_row['V']),
+                            'N': int(db_row['N']),
+                            'P': int(db_row['P']),
+                            'PT': int(db_row['PT'])
+                        }
+                        
+                        # Verifica corrispondenza
+                        match_status = "✅" if all(stats_screenshot[k] == db_stats[k] for k in ['PG', 'V', 'N', 'P', 'PT']) else "❌"
+                        
+                        comparison_data.append({
+                            'Squadra': team_match,
+                            'Screenshot': f"PG:{stats_screenshot['PG']} V:{stats_screenshot['V']} N:{stats_screenshot['N']} P:{stats_screenshot['P']} PT:{stats_screenshot['PT']}",
+                            'Database': f"PG:{db_stats['PG']} V:{db_stats['V']} N:{db_stats['N']} P:{db_stats['P']} PT:{db_stats['PT']}",
+                            'Stato': match_status
+                        })
+                    else:
+                        comparison_data.append({
+                            'Squadra': team_screenshot,
+                            'Screenshot': f"PG:{stats_screenshot['PG']} V:{stats_screenshot['V']} N:{stats_screenshot['N']} P:{stats_screenshot['P']} PT:{stats_screenshot['PT']}",
+                            'Database': '⚠️ Squadra non trovata',
+                            'Stato': '⚠️'
+                        })
+                
+                # Mostra tabella di confronto
+                if comparison_data:
+                    comparison_df = pd.DataFrame(comparison_data)
+                    st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+                    
+                    # Statistiche riepilogative
+                    total_teams = len(comparison_data)
+                    matched = sum(1 for row in comparison_data if row['Stato'] == '✅')
+                    mismatched = sum(1 for row in comparison_data if row['Stato'] == '❌')
+                    not_found = sum(1 for row in comparison_data if row['Stato'] == '⚠️')
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Squadre Totali", total_teams)
+                    with col2:
+                        st.metric("✅ Corrispondenti", matched)
+                    with col3:
+                        st.metric("❌ Non Corrispondenti", mismatched)
+                    with col4:
+                        st.metric("⚠️ Non Trovate", not_found)
+                    
+                    if matched == total_teams:
+                        st.success("🎉 Tutti i dati corrispondono perfettamente!")
+                    elif mismatched > 0:
+                        st.warning(f"⚠️ {mismatched} squadra/e non corrispondono. Verifica i dati.")
+                    if not_found > 0:
+                        st.info(f"ℹ️ {not_found} squadra/e non trovate nel database. Potrebbero avere nomi diversi.")
 
 # Pagina Under/Over
 elif page == "📊 Under/Over":
@@ -1110,22 +1413,34 @@ elif page == "📊 Classifiche con Parametri":
                                 if tm.empty:
                                     return ''
                                 tm = tm.sort_values('date_parsed', ascending=False).head(5)
-                                symbols = []
+                                symbols_data = []
                                 for _, m in tm.iterrows():
                                     team_home = (m['home_team'] == team_name)
                                     base_res = str(m.get('ft_result', '')).upper()
                                     if base_res == 'D':
-                                        symbols.append('N')
+                                        outcome = 'N'
                                     elif base_res == 'H':
-                                        symbols.append('V' if team_home else 'P')
+                                        outcome = 'V' if team_home else 'P'
                                     elif base_res == 'A':
-                                        symbols.append('V' if not team_home else 'P')
+                                        outcome = 'V' if not team_home else 'P'
                                     else:
-                                        symbols.append('?')
-                                def badge(s):
+                                        outcome = '?'
+                                    
+                                    # Prepara info partita
+                                    home_team = str(m.get('home_team', ''))
+                                    away_team = str(m.get('away_team', ''))
+                                    home_goals = str(int(m.get('ft_home_goals', 0) or 0))
+                                    away_goals = str(int(m.get('ft_away_goals', 0) or 0))
+                                    match_date = str(m.get('date', ''))
+                                    match_info = f"{home_team} {home_goals}-{away_goals} {away_team}\nData: {match_date}"
+                                    symbols_data.append((outcome, match_info))
+                                    
+                                def badge(s, info):
                                     color = '#28a745' if s == 'V' else ('#f0ad4e' if s == 'N' else ('#dc3545' if s == 'P' else '#6c757d'))
-                                    return f"<span style='display:inline-block;background:{color};color:white;border-radius:6px;padding:2px 6px;margin-right:4px;font-weight:600;'>" + s + "</span>"
-                                return ''.join(badge(s) for s in symbols)
+                                    # Escape quote per JavaScript
+                                    info_escaped = info.replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n')
+                                    return f"<span onclick=\"alert('{info_escaped}')\" style='display:inline-block;background:{color};color:white;border-radius:0;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;cursor:pointer;' title='{info_escaped.replace(chr(92)+'n', ' - ')}'>" + s + "</span>"
+                                return ''.join(badge(s, info) for s, info in symbols_data)
 
                             display_df = standings_df.copy()
                             # Aggiungi Forma usando colonna team
@@ -1700,9 +2015,9 @@ elif page == "🏆 Best Teams":
                     # Aggiungi colonna "ULTIME 5" per Under/Over
                     def badge_uo(s):
                         if s == 'O':
-                            return f"<span style='display:inline-block;background:#28a745;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;'>+</span>"
+                            return f"<span style='display:inline-block;background:#28a745;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;'>+</span>"
                         else:  # U
-                            return f"<span style='display:inline-block;background:#dc3545;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;'>-</span>"
+                            return f"<span style='display:inline-block;background:#dc3545;color:white;border-radius:6px;width:24px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:600;margin-right:4px;flex-shrink:0;'>-</span>"
                     
                     def compute_last5_uo_totale(row):
                         team_name = row['Squadra']
@@ -1853,6 +2168,151 @@ elif page == "📋 Log Accessi":
         with top2:
             st.metric("Visualizzazioni Totali", total_views_cum)
         st.info("Nessun accesso registrato ancora.")
+
+elif page == "💬 Chat":
+    st.title("💬 Chat - Cronologia Conversazioni")
+    
+    # Inizializza session_state per gestire la sessione chat corrente
+    if 'current_chat_session_id' not in st.session_state:
+        st.session_state.current_chat_session_id = None
+    
+    if 'chat_sessions_refresh' not in st.session_state:
+        st.session_state.chat_sessions_refresh = 0
+    
+    # Sidebar per gestire le sessioni chat
+    with st.sidebar.expander("📋 Gestione Chat", expanded=True):
+        # Bottone per nuova chat
+        if st.button("➕ Nuova Chat", use_container_width=True):
+            session_id = db.create_chat_session()
+            st.session_state.current_chat_session_id = session_id
+            st.session_state.chat_sessions_refresh += 1
+            st.rerun()
+        
+        st.markdown("---")
+        
+        # Lista delle chat esistenti
+        st.markdown("### Chat Esistenti")
+        sessions = db.list_chat_sessions(limit=50)
+        
+        if not sessions.empty:
+            for _, session in sessions.iterrows():
+                session_id = int(session['id'])
+                title = session['title'] if session['title'] else f"Chat {session_id}"
+                message_count = session['message_count']
+                updated_at = session['updated_at']
+                
+                # Formatta la data
+                try:
+                    dt = datetime.strptime(updated_at, '%Y-%m-%d %H:%M:%S')
+                    date_str = dt.strftime('%d/%m/%Y %H:%M')
+                except:
+                    date_str = updated_at
+                
+                # Pulsante per selezionare la chat
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    if st.button(f"📝 {title}", key=f"select_{session_id}", use_container_width=True):
+                        st.session_state.current_chat_session_id = session_id
+                        st.rerun()
+                
+                with col2:
+                    if st.button("🗑️", key=f"delete_{session_id}", help="Elimina chat"):
+                        db.delete_chat_session(session_id)
+                        if st.session_state.current_chat_session_id == session_id:
+                            st.session_state.current_chat_session_id = None
+                        st.session_state.chat_sessions_refresh += 1
+                        st.rerun()
+                
+                st.caption(f"{message_count} messaggi • {date_str}")
+        else:
+            st.info("Nessuna chat salvata. Crea una nuova chat per iniziare.")
+    
+    # Area principale: visualizza chat selezionata
+    if st.session_state.current_chat_session_id:
+        session_id = st.session_state.current_chat_session_id
+        session_info = db.get_chat_session_info(session_id)
+        
+        if session_info:
+            # Mostra info sessione
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.subheader(f"📝 {session_info['title']}")
+            with col2:
+                if st.button("✏️ Modifica Titolo", key="edit_title"):
+                    st.session_state.editing_title = True
+            
+            if st.session_state.get('editing_title', False):
+                new_title = st.text_input("Nuovo titolo:", value=session_info['title'], key="new_title_input")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Salva", key="save_title"):
+                        if new_title and new_title.strip():
+                            db.update_chat_session_title(session_id, new_title.strip())
+                            st.session_state.editing_title = False
+                            st.rerun()
+                with col2:
+                    if st.button("❌ Annulla", key="cancel_title"):
+                        st.session_state.editing_title = False
+                        st.rerun()
+            
+            st.caption(f"Creata il: {session_info['created_at']} • Ultimo aggiornamento: {session_info['updated_at']}")
+            st.markdown("---")
+            
+            # Visualizza cronologia messaggi
+            history = db.get_chat_history(session_id)
+            
+            if not history.empty:
+                st.markdown("### 📜 Cronologia Chat")
+                
+                # Mostra i messaggi esistenti
+                for _, msg in history.iterrows():
+                    role = msg['role']
+                    content = msg['content']
+                    
+                    with st.chat_message(role):
+                        st.write(content)
+                        st.caption(f"🕐 {msg['created_at']}")
+                
+                st.markdown("---")
+            else:
+                st.info("Questa chat è vuota. Inizia a scrivere per aggiungere messaggi!")
+            
+            # Input per nuovo messaggio
+            prompt = st.chat_input("Scrivi un messaggio...")
+            
+            if prompt:
+                # Salva messaggio utente
+                db.add_chat_message(session_id, "user", prompt)
+                
+                # Per ora, aggiungi una risposta automatica semplice
+                # In futuro, puoi integrare con un modello AI o logica personalizzata
+                response = f"Risposta automatica al messaggio: '{prompt}'"
+                db.add_chat_message(session_id, "assistant", response)
+                
+                st.rerun()
+        else:
+            st.error("Sessione chat non trovata. Seleziona una chat dalla sidebar.")
+            st.session_state.current_chat_session_id = None
+    else:
+        # Nessuna chat selezionata
+        st.info("👈 Seleziona una chat dalla sidebar o creane una nuova per iniziare!")
+        
+        # Mostra statistiche generali
+        all_sessions = db.list_chat_sessions(limit=1000)
+        if not all_sessions.empty:
+            st.markdown("### 📊 Statistiche")
+            col1, col2, col3 = st.columns(3)
+            
+            total_sessions = len(all_sessions)
+            total_messages = all_sessions['message_count'].sum()
+            
+            with col1:
+                st.metric("Chat Totali", total_sessions)
+            with col2:
+                st.metric("Messaggi Totali", int(total_messages))
+            with col3:
+                avg_messages = int(total_messages / total_sessions) if total_sessions > 0 else 0
+                st.metric("Media Messaggi/Chat", avg_messages)
 
 # Footer
 st.sidebar.markdown("---")
