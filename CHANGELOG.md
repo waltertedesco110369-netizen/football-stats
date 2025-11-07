@@ -1,5 +1,9 @@
 # Changelog
 
+## 2025-11-07
+- **Database**: Abilitato journal WAL, sincronizzazione ottimizzata e checkpoint per migliorare la persistenza su Render.
+- **Documentazione**: Aggiornata `CARICARE_DATI_SU_RENDER.md` con spiegazione dei limiti di persistenza e alternative consigliate.
+
 ## 2025-11-01
 - **Import File**: Rimozione filtro stagione manuale - ora la stagione viene sempre rilevata automaticamente dal file.
 - **Import File**: Rimozione selectbox "Tipo File" (parametro non utilizzato nel codice).
