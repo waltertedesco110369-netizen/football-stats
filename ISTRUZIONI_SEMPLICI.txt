@@ -1,0 +1,51 @@
+================================================================================
+ISTRUZIONI SEMPLICI - UNA SOLA OPERAZIONE
+================================================================================
+
+METODO VELOCE (1 COMANDO):
+---------------------------
+
+1. Converti PDF → Excel (salva il file)
+
+2. Apri PowerShell e vai nella cartella del progetto:
+   cd "C:\Users\Utente\Dropbox\Il mio PC (DESKTOP-0NJJED5)\Desktop\Cursor\Progetti\In Produzione\Fottball_Stats_New"
+
+3. Esegui UN SOLO comando:
+   python importa_excel_convertito.py "percorso_completo_del_file_excel"
+
+   Esempio:
+   python importa_excel_convertito.py "Import/Database/File/calcio base per data (2).xlsx"
+
+   Per importare anche nel database:
+   python importa_excel_convertito.py "Import/Database/File/calcio base per data (2).xlsx" -import
+
+4. FATTO! Lo script fa tutto automaticamente:
+   - Copia il file nel template
+   - Mappa i dati nel foglio DATI protetto
+   - (Opzionale) Importa nel database
+
+================================================================================
+
+METODO ANCORA PIÙ VELOCE (DOPPIO CLIC):
+----------------------------------------
+
+1. Converti PDF → Excel
+
+2. Fai doppio clic su: importa_excel_convertito.bat
+
+3. Trascina il file Excel convertito nella finestra
+
+4. Premi INVIO
+
+5. FATTO!
+
+================================================================================
+
+IMPORTANTE:
+-----------
+- Se il template è aperto, chiudilo prima di eseguire lo script
+- Lo script gestisce automaticamente il file se è aperto (attende 2 secondi)
+- Il foglio DATI protetto rimane sempre intatto
+
+================================================================================
+

@@ -1,0 +1,66 @@
+================================================================================
+GUIDA PASSO PASSO: Come copiare il file Excel convertito nel template
+================================================================================
+
+PASSO 1: Converti il PDF in Excel
+-----------------------------------
+- Usa il convertitore (PDF24, SmallPDF, Adobe, ecc.)
+- Salva il file Excel convertito
+- Esempio: "calcio base per data (2).xlsx"
+- Ricorda dove l'hai salvato
+
+PASSO 2: Apri PowerShell o Terminale
+-------------------------------------
+- Premi WIN + X e seleziona "Windows PowerShell" oppure "Terminal"
+- Oppure cerca "PowerShell" nel menu Start
+
+PASSO 3: Vai nella cartella del progetto
+-----------------------------------------
+- Digita:
+  cd "C:\Users\Utente\Dropbox\Il mio PC (DESKTOP-0NJJED5)\Desktop\Cursor\Progetti\In Produzione\Fottball_Stats_New"
+- Premi INVIO
+
+PASSO 4: Esegui lo script copy_excel_to_template.py
+----------------------------------------------------
+OPZIONE A - Se il file è nella cartella Import/Database/File:
+  python copy_excel_to_template.py "Import/Database/File/calcio base per data (2).xlsx"
+
+OPZIONE B - Se il file è sul Desktop:
+  python copy_excel_to_template.py "C:\Users\Utente\Desktop\calcio base per data (2).xlsx"
+
+OPZIONE C - Se il file è in un'altra cartella:
+  - Trascina il file nella PowerShell (copia il percorso automaticamente)
+  - Oppure digita il percorso completo tra virgolette
+
+PASSO 5: Verifica il risultato
+-------------------------------
+Lo script dovrebbe mostrare:
+  ✓ File copiato con successo!
+  - File convertito: calcio base per data (2).xlsx
+  - Template aggiornato: Import/Database/File/template_calcio_base.xlsx
+  - Foglio IMPORT_TEMP sostituito
+  - Foglio DATI protetto mantenuto ✓
+
+PASSO 6: Esegui la mappatura
+-----------------------------
+Digita:
+  python map_excel_to_template.py
+
+Questo script:
+- Legge i dati dal foglio IMPORT_TEMP
+- Li mappa correttamente
+- Scrive nel foglio DATI protetto
+
+PASSO 7: Importa nel database
+-------------------------------
+- Apri l'applicazione Streamlit
+- Vai alla sezione Import
+- Seleziona: Import/Database/File/template_calcio_base.xlsx
+- Seleziona il foglio: DATI
+- Clicca Import
+
+================================================================================
+IMPORTANTE: NON fare mai "Salva con nome" sul template!
+Usa SEMPRE lo script copy_excel_to_template.py per copiare i dati.
+================================================================================
+
