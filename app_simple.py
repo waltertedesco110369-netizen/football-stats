@@ -219,15 +219,8 @@ if st.sidebar.button("📊 Classifiche con Parametri", use_container_width=True)
 if st.sidebar.button("🎯 Giocata Proposta", use_container_width=True):
     st.session_state.page = "🎯 Giocata Proposta"
 
-# Chat nascosta agli ospiti solo su WEB/MOBILE pubblici (non su TEST)
-if APP_ENV in ["web", "mobile"]:
-    if user_role == "admin":
-        if st.sidebar.button("💬 Chat", use_container_width=True):
-            st.session_state.page = "💬 Chat"
-else:
-    # TEST: Chat visibile a tutti
-    if st.sidebar.button("💬 Chat", use_container_width=True):
-        st.session_state.page = "💬 Chat"
+if st.sidebar.button("💬 Chat", use_container_width=True):
+    st.session_state.page = "💬 Chat"
 
 # Solo Admin può vedere Import PDF
 if user_role == "admin":
@@ -254,12 +247,9 @@ if 'page' not in st.session_state:
 
 page = st.session_state.page
 
-# Mostra la pagina corrente (non mostrare Chat per guest su WEB/MOBILE)
+# Mostra la pagina corrente
 st.sidebar.markdown("---")
-display_page = page
-if page == "💬 Chat" and APP_ENV in ["web", "mobile"] and user_role != "admin":
-    display_page = "📊 Dashboard"
-st.sidebar.markdown(f"**Pagina Corrente:** {display_page}")
+st.sidebar.markdown(f"**Pagina Corrente:** {page}")
 
 # Funzione per mostrare le classifiche senza PyArrow
 def show_standings_simple(standings_df, title, show_achievements=False, current_season=None, matches_df_for_form=None, standings_type_for_form="total", venue_for_form="TOTALE", form_insert_after=None, form_insert_before=None, show_title=True, show_summary_metrics=True):
@@ -2180,12 +2170,6 @@ elif page == "📋 Log Accessi":
         st.info("Nessun accesso registrato ancora.")
 
 elif page == "💬 Chat":
-    # Chat protetta per guest su WEB/MOBILE pubblici (non su TEST)
-    if APP_ENV in ["web", "mobile"] and user_role != "admin":
-        st.error("❌ Accesso negato: Questa pagina è riservata agli amministratori.")
-        st.session_state.page = "📊 Dashboard"
-        st.rerun()
-    
     st.title("💬 Chat - Cronologia Conversazioni")
     
     # Inizializza session_state per gestire la sessione chat corrente
